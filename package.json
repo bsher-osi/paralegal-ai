@@ -1,0 +1,12 @@
+{
+  "name": "paralegal-ai",
+  "version": "1.0.0",
+  "description": "Paralegal AI Agent for personal injury law firm — Azure Static Web App with MSAL auth and Claude API",
+  "private": true,
+  "scripts": {
+    "start": "npx serve . -l 3000",
+    "dev": "npx serve . -l 3000 --cors"
+  },
+  "keywords": ["paralegal", "ai", "legal", "personal-injury", "azure-swa"],
+  "license": "UNLICENSED"
+}

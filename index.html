@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paralegal AI — Personal Injury Case Management</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- ─── Header ──────────────────────────────────────── -->
+    <header class="app-header">
+      <div class="logo">
+        <div class="logo-icon">&#9878;</div>
+        <span>Paralegal AI</span>
+      </div>
+      <div class="header-actions">
+        <span id="user-display"></span>
+        <button id="btn-sign-in" class="btn btn-primary btn-sm" onclick="signIn()">
+          Sign in with Microsoft
+        </button>
+        <button id="btn-sign-out" class="btn btn-outline btn-sm" onclick="signOut()" style="display:none">
+          Sign Out
+        </button>
+      </div>
+    </header>
+
+    <!-- ─── Auth Gate (shown when not signed in) ────────── -->
+    <div id="auth-gate" class="auth-gate">
+      <div class="logo-icon" style="width:64px;height:64px;font-size:36px;border-radius:16px;background:var(--accent);display:flex;align-items:center;justify-content:center">&#9878;</div>
+      <h2>Paralegal AI Agent</h2>
+      <p>Personal injury case management with AI-powered document drafting. Sign in with your Microsoft 365 account to access email, calendar, and file integrations.</p>
+      <button class="btn btn-primary" onclick="signIn()" style="padding:12px 32px;font-size:16px">
+        Sign in with Microsoft 365
+      </button>
+      <p style="font-size:13px;color:var(--text-muted);margin-top:8px">
+        Or <a href="#" onclick="event.preventDefault();bypassAuth()" style="color:var(--accent)">continue without sign-in</a> (CRM &amp; AI drafting only)
+      </p>
+    </div>
+
+    <!-- ─── Main App (shown after auth) ─────────────────── -->
+    <div id="app-main" class="app-body" style="display:none">
+      <!-- Sidebar -->
+      <nav class="sidebar">
+        <div class="sidebar-section-label">Workspace</div>
+        <ul class="sidebar-nav">
+          <li><a class="active" onclick="switchPanel('crm')" data-panel="crm">
+            <span class="nav-icon">&#9776;</span><span>Case Board</span>
+          </a></li>
+          <li><a onclick="switchPanel('agent')" data-panel="agent">
+            <span class="nav-icon">&#9998;</span><span>AI Drafter</span>
+          </a></li>
+          <li><a onclick="switchPanel('email')" data-panel="email">
+            <span class="nav-icon">&#9993;</span><span>Email</span>
+          </a></li>
+          <li><a onclick="switchPanel('calendar')" data-panel="calendar">
+            <span class="nav-icon">&#128197;</span><span>Calendar</span>
+          </a></li>
+          <li><a onclick="switchPanel('demand')" data-panel="demand">
+            <span class="nav-icon">&#9997;</span><span>Demand Letter</span>
+          </a></li>
+        </ul>
+        <div class="sidebar-section-label" style="margin-top:auto">System</div>
+        <ul class="sidebar-nav">
+          <li><a onclick="switchPanel('settings')" data-panel="settings">
+            <span class="nav-icon">&#9881;</span><span>Settings</span>
+          </a></li>
+        </ul>
+      </nav>
+
+      <!-- Content Panels -->
+      <main class="main-content">
+        <!-- CRM / Kanban Panel -->
+        <div id="panel-crm" class="panel active">
+          <div class="panel-header">
+            <h1>Case Intake Board</h1>
+            <button class="btn btn-primary" onclick="openNewCaseForm()">+ New Intake</button>
+          </div>
+          <div id="kanban-board"></div>
+        </div>
+
+        <!-- AI Agent Panel -->
+        <div id="panel-agent" class="panel">
+          <div class="panel-header">
+            <h1>AI Document Drafter</h1>
+          </div>
+          <div id="agent-content"></div>
+        </div>
+
+        <!-- Email Panel -->
+        <div id="panel-email" class="panel">
+          <div class="panel-header">
+            <h1>Email</h1>
+            <button class="btn btn-primary btn-sm" onclick="loadEmails()">Refresh</button>
+          </div>
+          <div id="email-list">
+            <p style="color:var(--text-muted)">Sign in with Microsoft 365 to view your inbox.</p>
+          </div>
+        </div>
+
+        <!-- Calendar Panel -->
+        <div id="panel-calendar" class="panel">
+          <div class="panel-header">
+            <h1>Upcoming Events</h1>
+            <button class="btn btn-primary btn-sm" onclick="loadCalendar()">Refresh</button>
+          </div>
+          <div id="calendar-list">
+            <p style="color:var(--text-muted)">Sign in with Microsoft 365 to view your calendar.</p>
+          </div>
+        </div>
+
+        <!-- Demand Letter Panel -->
+        <div id="panel-demand" class="panel">
+          <div class="panel-header">
+            <h1>Demand Letter Generator</h1>
+          </div>
+          <div id="demand-content"></div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div id="panel-settings" class="panel">
+          <div class="panel-header">
+            <h1>Settings</h1>
+          </div>
+
+          <div class="settings-section">
+            <h3>Claude API Configuration</h3>
+            <div class="form-group">
+              <label>API Key</label>
+              <input type="password" id="settings-api-key" placeholder="sk-ant-..." />
+            </div>
+            <br />
+            <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save API Key</button>
+            <p style="font-size:12px;color:var(--text-muted);margin-top:8px">
+              Your API key is stored in browser localStorage only. It is never sent to any server except Anthropic's API.
+            </p>
+          </div>
+
+          <div class="settings-section">
+            <h3>Microsoft 365 Connection</h3>
+            <div class="settings-row">
+              <span class="settings-label">Status</span>
+              <span class="settings-value" id="settings-o365-status">Not connected</span>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">Account</span>
+              <span class="settings-value" id="settings-o365-account">—</span>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">Scopes</span>
+              <span class="settings-value" style="font-size:12px;color:var(--text-muted)">
+                User.Read, Mail.Read, Mail.Send, Calendars.ReadWrite, Files.ReadWrite, Sites.ReadWrite.All
+              </span>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>CRM Data</h3>
+            <div class="settings-row">
+              <span class="settings-label">Storage</span>
+              <span class="settings-value">Browser localStorage</span>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">Cases</span>
+              <span class="settings-value" id="settings-case-count">0</span>
+            </div>
+            <br />
+            <button class="btn btn-outline btn-sm" onclick="exportCases()">Export Cases (JSON)</button>
+            <button class="btn btn-danger btn-sm" style="margin-left:8px" onclick="resetCrmData()">Reset to Demo Data</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ─── Case Detail Modal ───────────────────────────────── -->
+  <div id="case-modal" class="modal-overlay" onclick="if(event.target===this)closeCaseModal()">
+    <div class="modal-box" id="case-modal-content"></div>
+  </div>
+
+  <!-- ─── Toast Container ─────────────────────────────────── -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ─── Scripts ──────────────────────────────────────────── -->
+  <script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+  <script src="auth.js"></script>
+  <script src="graphClient.js"></script>
+  <script src="crmData.js"></script>
+  <script src="agentTasks.js"></script>
+  <script src="demandPanel.js"></script>
+  <script>
+    // ─── App Initialization ────────────────────────────────
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      // Init MSAL
+      try {
+        await initAuth();
+      } catch (e) {
+        console.warn("MSAL init failed (offline mode):", e);
+      }
+
+      // Load saved API key into settings input
+      const savedKey = getClaudeApiKey();
+      const keyInput = document.getElementById("settings-api-key");
+      if (keyInput && savedKey) keyInput.value = savedKey;
+
+      // Render initial panels
+      renderKanbanBoard();
+      renderAgentPanel();
+      updateSettingsPanel();
+    });
+
+    // ─── Panel Switching ───────────────────────────────────
+
+    function switchPanel(panelId) {
+      // Hide all panels
+      document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+      // Show target
+      const target = document.getElementById("panel-" + panelId);
+      if (target) target.classList.add("active");
+
+      // Update nav
+      document.querySelectorAll(".sidebar-nav a").forEach((a) => a.classList.remove("active"));
+      const navLink = document.querySelector(`[data-panel="${panelId}"]`);
+      if (navLink) navLink.classList.add("active");
+
+      // Lazy-load panel data
+      if (panelId === "agent") renderAgentPanel();
+      if (panelId === "email") loadEmails();
+      if (panelId === "calendar") loadCalendar();
+      if (panelId === "demand") renderDemandPanel();
+      if (panelId === "settings") updateSettingsPanel();
+    }
+
+    // ─── Bypass Auth (offline mode) ────────────────────────
+
+    function bypassAuth() {
+      document.getElementById("app-main").style.display = "flex";
+      document.getElementById("auth-gate").style.display = "none";
+      showToast("Running in offline mode — O365 features disabled");
+    }
+
+    // ─── Settings Helpers ──────────────────────────────────
+
+    function saveApiKey() {
+      const key = document.getElementById("settings-api-key")?.value?.trim();
+      if (!key) {
+        showToast("Please enter an API key", "error");
+        return;
+      }
+      setClaudeApiKey(key);
+      showToast("API key saved");
+    }
+
+    function updateSettingsPanel() {
+      const cases = loadCases();
+      const countEl = document.getElementById("settings-case-count");
+      if (countEl) countEl.textContent = cases.length;
+
+      const statusEl = document.getElementById("settings-o365-status");
+      const accountEl = document.getElementById("settings-o365-account");
+      if (isAuthenticated()) {
+        const acct = getCurrentAccount();
+        if (statusEl) statusEl.textContent = "Connected";
+        if (statusEl) statusEl.style.color = "var(--success)";
+        if (accountEl) accountEl.textContent = acct?.username || acct?.name || "—";
+      } else {
+        if (statusEl) statusEl.textContent = "Not connected";
+        if (statusEl) statusEl.style.color = "var(--text-muted)";
+        if (accountEl) accountEl.textContent = "—";
+      }
+    }
+
+    function exportCases() {
+      const cases = loadCases();
+      const blob = new Blob([JSON.stringify(cases, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `paralegal-cases-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Cases exported");
+    }
+
+    function resetCrmData() {
+      if (!confirm("Reset all cases to demo data? This cannot be undone.")) return;
+      localStorage.removeItem(CRM_STORAGE_KEY);
+      renderKanbanBoard();
+      updateSettingsPanel();
+      showToast("CRM data reset to demo");
+    }
+
+    // ─── Email Panel ───────────────────────────────────────
+
+    async function loadEmails() {
+      const list = document.getElementById("email-list");
+      if (!isAuthenticated()) {
+        list.innerHTML = `<p style="color:var(--text-muted)">Sign in with Microsoft 365 to view your inbox.</p>`;
+        return;
+      }
+
+      list.innerHTML = `<div class="agent-loading"><div class="spinner"></div> Loading emails...</div>`;
+
+      try {
+        const data = await getRecentEmails(20);
+        const emails = data.value || [];
+        if (emails.length === 0) {
+          list.innerHTML = `<p style="color:var(--text-muted)">No recent emails found.</p>`;
+          return;
+        }
+
+        list.innerHTML = emails
+          .map(
+            (e) => `
+          <div class="settings-section" style="padding:14px;margin-bottom:8px;cursor:default">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div>
+                <div style="font-weight:600;font-size:14px">${escapeHtml(e.subject || "(No subject)")}</div>
+                <div style="font-size:12px;color:var(--text-muted)">
+                  From: ${escapeHtml(e.from?.emailAddress?.name || e.from?.emailAddress?.address || "Unknown")}
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);white-space:nowrap">
+                ${new Date(e.receivedDateTime).toLocaleString()}
+              </div>
+            </div>
+            <div style="font-size:13px;color:var(--text-secondary);margin-top:6px">
+              ${escapeHtml((e.bodyPreview || "").slice(0, 150))}${(e.bodyPreview || "").length > 150 ? "..." : ""}
+            </div>
+          </div>
+        `
+          )
+          .join("");
+      } catch (error) {
+        list.innerHTML = `<div class="agent-error">Failed to load emails: ${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    // ─── Calendar Panel ────────────────────────────────────
+
+    async function loadCalendar() {
+      const list = document.getElementById("calendar-list");
+      if (!isAuthenticated()) {
+        list.innerHTML = `<p style="color:var(--text-muted)">Sign in with Microsoft 365 to view your calendar.</p>`;
+        return;
+      }
+
+      list.innerHTML = `<div class="agent-loading"><div class="spinner"></div> Loading events...</div>`;
+
+      try {
+        const data = await getUpcomingEvents(14);
+        const events = data.value || [];
+        if (events.length === 0) {
+          list.innerHTML = `<p style="color:var(--text-muted)">No upcoming events in the next 14 days.</p>`;
+          return;
+        }
+
+        list.innerHTML = events
+          .map(
+            (e) => `
+          <div class="settings-section" style="padding:14px;margin-bottom:8px;cursor:default">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div style="font-weight:600;font-size:14px">${escapeHtml(e.subject || "(No title)")}</div>
+              <div style="font-size:11px;color:var(--text-muted);white-space:nowrap">
+                ${new Date(e.start?.dateTime + "Z").toLocaleString()}
+              </div>
+            </div>
+            ${e.location?.displayName ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px">${escapeHtml(e.location.displayName)}</div>` : ""}
+          </div>
+        `
+          )
+          .join("");
+      } catch (error) {
+        list.innerHTML = `<div class="agent-error">Failed to load calendar: ${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    // ─── Toast Notifications ───────────────────────────────
+
+    function showToast(message, type = "info") {
+      const container = document.getElementById("toast-container");
+      const toast = document.createElement("div");
+      toast.className = "toast" + (type === "error" ? " error" : "");
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+  </script>
+</body>
+</html>
