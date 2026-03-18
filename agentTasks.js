@@ -2,7 +2,7 @@
 // NOTE: In a production SPA, Claude API calls should go through a backend proxy
 // to protect the API key. For this prototype, the key is stored in the browser settings panel.
 
-const CLAUDE_MODEL = "claude-sonnet-4-6-20250514";
+const CLAUDE_MODEL = "claude-sonnet-4-20250514";
 
 const DOCUMENT_TEMPLATES = [
   {
