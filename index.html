@@ -98,15 +98,12 @@
           </div>
         </div>
 
-        <!-- Calendar Panel -->
+        <!-- Calendar / Deadlines Panel -->
         <div id="panel-calendar" class="panel">
           <div class="panel-header">
-            <h1>Upcoming Events</h1>
-            <button class="btn btn-primary btn-sm" onclick="loadCalendar()">Refresh</button>
+            <h1>Case Deadlines</h1>
           </div>
-          <div id="calendar-list">
-            <p style="color:var(--text-muted)">Sign in with Microsoft 365 to view your calendar.</p>
-          </div>
+          <div id="calendar-content"></div>
         </div>
 
         <!-- Demand Letter Panel -->
@@ -188,6 +185,7 @@
   <script src="crmData.js"></script>
   <script src="agentTasks.js"></script>
   <script src="demandPanel.js"></script>
+  <script src="calendarPanel.js"></script>
   <script>
     // ─── App Initialization ────────────────────────────────
 
@@ -227,7 +225,7 @@
       // Lazy-load panel data
       if (panelId === "agent") renderAgentPanel();
       if (panelId === "email") loadEmails();
-      if (panelId === "calendar") loadCalendar();
+      if (panelId === "calendar") renderCalendarPanel();
       if (panelId === "demand") renderDemandPanel();
       if (panelId === "settings") updateSettingsPanel();
     }
