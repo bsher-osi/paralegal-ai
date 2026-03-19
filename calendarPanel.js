@@ -2,7 +2,7 @@
 // Displays case deadlines from the backend API, with sync from CRM
 // and manual deadline creation.
 
-const CALENDAR_API_BASE = "http://localhost:5000"; // updated when EC2 is live
+const CALENDAR_API_BASE = "https://tools.sherlawgroup.com";
 
 let _deadlinesCache = [];
 
