@@ -288,7 +288,7 @@ async function submitDemand(event) {
   const btn = document.getElementById("demand-submit-btn");
   if (!form || !btn) return;
 
-  const token = typeof getIdToken === "function" ? getIdToken() : null;
+  const token = typeof getIdToken === "function" ? await getIdToken() : null;
   if (!token) {
     showToast("Please sign in first", "error");
     return;
@@ -338,7 +338,7 @@ function showDemandProgress(jobId) {
 
   const poll = setInterval(async () => {
     try {
-      const token = typeof getIdToken === "function" ? getIdToken() : null;
+      const token = typeof getIdToken === "function" ? await getIdToken() : null;
       const resp = await fetch(`${DEMANDS_API_BASE}/api/job/${jobId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });

@@ -129,23 +129,31 @@ function updateAuthUI() {
 }
 
 /**
- * Get the raw MSAL id_token JWT string for use as a Bearer token to backend APIs.
- * The id_token's audience is this app's clientId, which the Flask backend validates.
+ * Get a fresh id_token for use as a Bearer token to backend APIs.
+ * Uses acquireTokenSilent so MSAL auto-refreshes expired tokens.
  */
-function getIdToken() {
-  if (!currentAccount) return null;
-  // MSAL stores tokens in localStorage; search for the id_token entry
-  const clientId = msalConfig.auth.clientId.toLowerCase();
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.includes(clientId) && key.includes("idtoken")) {
-      try {
-        const cached = JSON.parse(localStorage.getItem(key));
-        if (cached && cached.secret) return cached.secret;
-      } catch (e) { /* skip */ }
+async function getIdToken() {
+  if (!msalInstance || !currentAccount) return null;
+  try {
+    const response = await msalInstance.acquireTokenSilent({
+      scopes: [msalConfig.auth.clientId + "/.default"],
+      account: currentAccount,
+    });
+    return response.idToken;
+  } catch (e) {
+    // If silent refresh fails, try popup
+    try {
+      const response = await msalInstance.acquireTokenPopup({
+        scopes: [msalConfig.auth.clientId + "/.default"],
+        account: currentAccount,
+      });
+      return response.idToken;
+    } catch (popupError) {
+      console.error("Token refresh failed:", popupError);
+      showToast("Session expired — please sign in again.", "error");
+      return null;
     }
   }
-  return null;
 }
 
 function isAuthenticated() {

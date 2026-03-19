@@ -31,7 +31,7 @@ async function fetchAndRenderDeadlines() {
   const list = document.getElementById("deadlines-list");
   if (!list) return;
 
-  const token = typeof getIdToken === "function" ? getIdToken() : null;
+  const token = typeof getIdToken === "function" ? await getIdToken() : null;
   try {
     const resp = await fetch(`${CALENDAR_API_BASE}/api/deadlines`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -114,7 +114,7 @@ async function syncDeadlinesFromCases() {
     return;
   }
 
-  const token = typeof getIdToken === "function" ? getIdToken() : null;
+  const token = typeof getIdToken === "function" ? await getIdToken() : null;
   try {
     const resp = await fetch(`${CALENDAR_API_BASE}/api/deadlines/sync`, {
       method: "POST",
@@ -191,7 +191,7 @@ async function submitAddDeadline() {
   const caseId = caseSelect?.value || "";
   const clientName = caseSelect?.selectedOptions[0]?.dataset?.name || "";
 
-  const token = typeof getIdToken === "function" ? getIdToken() : null;
+  const token = typeof getIdToken === "function" ? await getIdToken() : null;
   try {
     const resp = await fetch(`${CALENDAR_API_BASE}/api/deadlines`, {
       method: "POST",
@@ -213,7 +213,7 @@ async function submitAddDeadline() {
 // ─── Delete ───────────────────────────────────────────────────────
 
 async function deleteDeadline(id) {
-  const token = typeof getIdToken === "function" ? getIdToken() : null;
+  const token = typeof getIdToken === "function" ? await getIdToken() : null;
   try {
     await fetch(`${CALENDAR_API_BASE}/api/deadlines/${id}`, {
       method: "DELETE",
