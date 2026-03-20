@@ -164,7 +164,7 @@ function _showExtractBill() {
 async function _extractBill() {
   const text = document.getElementById("bill-text")?.value?.trim();
   if (!text) { showToast("Paste bill text first", "error"); return; }
-  const apiKey = localStorage.getItem("claude_api_key");
+  const apiKey = getClaudeApiKey();
   if (!apiKey) { showToast("Set Claude API key in Settings", "error"); return; }
 
   showToast("Extracting...");

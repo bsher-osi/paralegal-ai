@@ -51,12 +51,12 @@ async function _doResearch() {
   const btn = document.getElementById("research-btn");
   const output = document.getElementById("research-output");
 
-  const apiKey = localStorage.getItem("claude_api_key");
+  const apiKey = getClaudeApiKey();
   if (!apiKey) { showToast("Set your Claude API key in Settings first", "error"); return; }
 
   btn.disabled = true;
   btn.textContent = "Researching...";
-  output.innerHTML = `<div class="agent-loading"><div class="loading-spinner"></div><span>Researching — this may take a moment...</span></div>`;
+  output.innerHTML = `<div class="agent-loading"><div class="spinner"></div><span>Researching — this may take a moment...</span></div>`;
 
   const systemPrompt = `You are a legal research assistant for a personal injury law firm. You provide thorough, well-cited legal research.
 

@@ -150,13 +150,13 @@ function _showAiSummary() {
 async function _summarizeMedRecords() {
   const text = document.getElementById("medrec-ai-text")?.value?.trim();
   if (!text) { showToast("Paste medical record text", "error"); return; }
-  const apiKey = localStorage.getItem("claude_api_key");
+  const apiKey = getClaudeApiKey();
   if (!apiKey) { showToast("Set Claude API key in Settings", "error"); return; }
 
   const btn = document.getElementById("medrec-ai-btn");
   const output = document.getElementById("medrec-ai-output");
   btn.disabled = true; btn.textContent = "Analyzing...";
-  output.innerHTML = `<div class="agent-loading"><div class="loading-spinner"></div><span>Analyzing records...</span></div>`;
+  output.innerHTML = `<div class="agent-loading"><div class="spinner"></div><span>Analyzing records...</span></div>`;
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
