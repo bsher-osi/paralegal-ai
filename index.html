@@ -62,6 +62,9 @@
         </ul>
         <div class="sidebar-section-label">Paralegal Tools</div>
         <ul class="sidebar-nav">
+          <li><a onclick="switchPanel('lor')" data-panel="lor">
+            <span class="nav-icon">&#128228;</span><span>LOR Letters</span>
+          </a></li>
           <li><a onclick="switchPanel('sol')" data-panel="sol">
             <span class="nav-icon">&#9203;</span><span>SOL Checker</span>
           </a></li>
@@ -71,8 +74,17 @@
           <li><a onclick="switchPanel('liens')" data-panel="liens">
             <span class="nav-icon">&#128176;</span><span>Liens &amp; Specials</span>
           </a></li>
+          <li><a onclick="switchPanel('settlement')" data-panel="settlement">
+            <span class="nav-icon">&#128181;</span><span>Settlement Dist.</span>
+          </a></li>
           <li><a onclick="switchPanel('requests')" data-panel="requests">
             <span class="nav-icon">&#128236;</span><span>Record Requests</span>
+          </a></li>
+          <li><a onclick="switchPanel('contact')" data-panel="contact">
+            <span class="nav-icon">&#128222;</span><span>Contact Log</span>
+          </a></li>
+          <li><a onclick="switchPanel('litigation')" data-panel="litigation">
+            <span class="nav-icon">&#9878;</span><span>Litigation</span>
           </a></li>
           <li><a onclick="switchPanel('research')" data-panel="research">
             <span class="nav-icon">&#128269;</span><span>Legal Research</span>
@@ -135,6 +147,12 @@
           <div id="demand-content"></div>
         </div>
 
+        <!-- LOR Letters Panel -->
+        <div id="panel-lor" class="panel">
+          <div class="panel-header"><h1>Letters of Representation</h1></div>
+          <div id="lor-content"></div>
+        </div>
+
         <!-- SOL Checker Panel -->
         <div id="panel-sol" class="panel">
           <div class="panel-header"><h1>Statute of Limitations</h1></div>
@@ -153,10 +171,28 @@
           <div id="liens-content"></div>
         </div>
 
+        <!-- Settlement Distribution Panel -->
+        <div id="panel-settlement" class="panel">
+          <div class="panel-header"><h1>Settlement Distribution Sheet</h1></div>
+          <div id="settlement-content"></div>
+        </div>
+
         <!-- Record Requests Panel -->
         <div id="panel-requests" class="panel">
           <div class="panel-header"><h1>Record Request Letters</h1></div>
           <div id="requests-content"></div>
+        </div>
+
+        <!-- Contact Log Panel -->
+        <div id="panel-contact" class="panel">
+          <div class="panel-header"><h1>Client Contact Log</h1></div>
+          <div id="contact-content"></div>
+        </div>
+
+        <!-- Litigation Tracker Panel -->
+        <div id="panel-litigation" class="panel">
+          <div class="panel-header"><h1>Litigation Tracker</h1></div>
+          <div id="litigation-content"></div>
         </div>
 
         <!-- Legal Research Panel -->
@@ -246,9 +282,14 @@
   <script src="solPanel.js"></script>
   <script src="medRecordsPanel.js"></script>
   <script src="liensPanel.js"></script>
+  <script src="settlementPanel.js"></script>
   <script src="requestsPanel.js"></script>
   <script src="researchPanel.js"></script>
   <script src="productivityPanel.js"></script>
+  <script src="lorPanel.js"></script>
+  <script src="contactPanel.js"></script>
+  <script src="litigationPanel.js"></script>
+  <script src="caseAgents.js"></script>
   <script>
     // ─── App Initialization ────────────────────────────────
 
@@ -293,9 +334,13 @@
       if (panelId === "sol") renderSolPanel();
       if (panelId === "medrecords") renderMedRecordsPanel();
       if (panelId === "liens") renderLiensPanel();
+      if (panelId === "settlement") renderSettlementPanel();
       if (panelId === "requests") renderRequestsPanel();
       if (panelId === "research") renderResearchPanel();
       if (panelId === "productivity") renderProductivityPanel();
+      if (panelId === "lor") renderLorPanel();
+      if (panelId === "contact") renderContactPanel();
+      if (panelId === "litigation") renderLitigationPanel();
       if (panelId === "settings") updateSettingsPanel();
     }
 
