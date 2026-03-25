@@ -5,6 +5,8 @@ const CRM_STORAGE_KEY = "paralegal_crm_cases";
 
 const CASE_STAGES = [
   { id: "intake", label: "New Intake", color: "#6366f1" },
+  { id: "fee_agreement_sent", label: "Fee Agmt Sent", color: "#a855f7" },
+  { id: "fee_agreement_signed", label: "Agmt Signed", color: "#7c3aed" },
   { id: "lor_sent", label: "LOR Sent", color: "#8b5cf6" },
   { id: "records_collection", label: "Collecting Records", color: "#3b82f6" },
   { id: "treatment", label: "Client Treating", color: "#0ea5e9" },
@@ -219,6 +221,20 @@ function renderKanbanBoard() {
   const board = document.getElementById("kanban-board");
   if (!board) return;
 
+  // Update the header buttons to include import options
+  const header = document.querySelector("#panel-crm .panel-header");
+  if (header && !header.dataset.importWired) {
+    header.dataset.importWired = "1";
+    header.innerHTML = `
+      <h1>Case Intake Board</h1>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="openNewCaseForm()">+ New Intake</button>
+        <button class="btn btn-outline btn-sm" onclick="_showEmailImport()">📧 Import from Email</button>
+        <button class="btn btn-outline btn-sm" onclick="_showAttorneyShareImport()">⚖ Attorney Share</button>
+      </div>
+    `;
+  }
+
   const grouped = getCasesByStage();
 
   board.innerHTML = CASE_STAGES.map(
@@ -354,8 +370,11 @@ function openCaseDetail(caseId) {
         <div class="form-group full-width"><label>Notes</label><textarea name="notes" rows="6">${escapeHtml(c.notes || "")}</textarea></div>
         ${c.caseValueRange ? `<div style="margin-top:12px;padding:12px;background:var(--bg-card);border-radius:8px;border:1px solid var(--border)"><div style="font-weight:600;font-size:13px;margin-bottom:4px">AI Case Valuation</div><div style="font-size:13px;color:var(--text-secondary)">${escapeHtml(c.caseValueRange)}</div></div>` : ""}
       </div>
-      <div class="modal-actions">
+      <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
         <button type="submit" class="btn btn-primary">Save Changes</button>
+        ${c.stage === "intake" ? `<button type="button" class="btn btn-accent" style="background:#a855f7" onclick="showFeeAgreementPreview('${c.id}')">Send Fee Agreement</button>` : ""}
+        ${c.stage === "fee_agreement_sent" ? `<button type="button" class="btn btn-accent" style="background:#22c55e" onclick="markAgreementSigned('${c.id}')">Agreement Signed</button>` : ""}
+        ${c.stage === "fee_agreement_sent" && c.docusignEnvelopeId ? `<button type="button" class="btn btn-outline" onclick="checkAgreementStatus('${c.id}')">Check Signature</button>` : ""}
         <button type="button" class="btn btn-outline" onclick="generateDraftForCase('${c.id}')">Draft with AI</button>
         <button type="button" class="btn btn-danger" onclick="confirmDeleteCase('${c.id}')">Delete</button>
       </div>
@@ -460,6 +479,308 @@ function submitNewCase(event) {
   // Trigger intake automation
   if (typeof onCaseCreate === "function") {
     onCaseCreate(newCase.id);
+  }
+}
+
+// ─── Import: Email Referral ──────────────────────────────────
+
+function _showEmailImport() {
+  const modal = document.getElementById("case-modal");
+  const content = document.getElementById("case-modal-content");
+
+  content.innerHTML = `
+    <div class="modal-header">
+      <h2>Import from Email Referral</h2>
+      <button class="btn-icon" onclick="closeCaseModal()">&times;</button>
+    </div>
+    <div style="padding:0 4px">
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">
+        Paste the referral email content below. AI will extract client info, case details, and create a new case.
+      </p>
+      <div class="form-group">
+        <label>Email Content</label>
+        <textarea id="email-import-text" rows="10" placeholder="Paste the full referral email here..."></textarea>
+      </div>
+      <div id="email-import-preview" style="margin-top:12px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="_parseEmailReferral()" id="email-import-btn">Parse with AI</button>
+        <button class="btn btn-outline" onclick="closeCaseModal()">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  modal.classList.add("open");
+}
+
+async function _parseEmailReferral() {
+  const emailText = document.getElementById("email-import-text")?.value?.trim();
+  if (!emailText) { showToast("Paste email content first", "error"); return; }
+
+  const apiKey = typeof getClaudeApiKey === "function" ? getClaudeApiKey() : null;
+  if (!apiKey) { showToast("Set Claude API key in Settings", "error"); return; }
+
+  const btn = document.getElementById("email-import-btn");
+  const preview = document.getElementById("email-import-preview");
+  btn.disabled = true; btn.textContent = "Parsing...";
+  preview.innerHTML = `<div class="agent-loading"><div class="spinner"></div><span>Extracting case info...</span></div>`;
+
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json", "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: typeof CLAUDE_MODEL !== "undefined" ? CLAUDE_MODEL : "claude-sonnet-4-20250514",
+        max_tokens: 1024,
+        system: `You are a legal intake assistant. Extract case information from a referral email. Return ONLY a valid JSON object with these fields (use empty string if unknown):
+{
+  "clientName": "full name",
+  "phone": "phone number",
+  "email": "email address",
+  "dob": "YYYY-MM-DD or empty",
+  "address": "full address",
+  "caseType": "one of: Auto Accident, Slip & Fall, Medical Malpractice, Workplace Injury, Product Liability, Wrongful Death, Dog Bite, Other",
+  "dateOfIncident": "YYYY-MM-DD or empty",
+  "description": "brief description of incident and injuries",
+  "referralSource": "referring attorney or source name",
+  "notes": "any additional relevant details"
+}`,
+        messages: [{ role: "user", content: emailText }],
+      }),
+    });
+
+    const data = await resp.json();
+    const raw = data.content?.[0]?.text || "{}";
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("Could not parse response");
+    const extracted = JSON.parse(match[0]);
+
+    // Show editable confirmation
+    preview.innerHTML = `
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px">
+        <div style="font-weight:600;margin-bottom:12px;color:var(--accent)">Extracted — Review & Confirm</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Client Name</label><input id="ei-name" value="${escapeHtml(extracted.clientName || "")}" /></div>
+          <div class="form-group"><label>Case Type</label>
+            <select id="ei-type">${CASE_TYPES.map(t => `<option ${t === extracted.caseType ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+          <div class="form-group"><label>Phone</label><input id="ei-phone" value="${escapeHtml(extracted.phone || "")}" /></div>
+          <div class="form-group"><label>Email</label><input id="ei-email" value="${escapeHtml(extracted.email || "")}" /></div>
+          <div class="form-group"><label>Date of Incident</label><input type="date" id="ei-doi" value="${extracted.dateOfIncident || ""}" /></div>
+          <div class="form-group"><label>Referral</label><input id="ei-ref" value="${escapeHtml(extracted.referralSource || "")}" /></div>
+        </div>
+        <div class="form-group full-width"><label>Description</label><textarea id="ei-desc" rows="2">${escapeHtml(extracted.description || "")}</textarea></div>
+        <div class="form-group full-width"><label>Notes</label><textarea id="ei-notes" rows="2">${escapeHtml(extracted.notes || "")}</textarea></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-primary" onclick="_confirmEmailImport()">Create Case</button>
+          <button class="btn btn-outline" onclick="_parseEmailReferral()">Re-parse</button>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    preview.innerHTML = `<div class="agent-error">Parse failed: ${escapeHtml(err.message)}</div>`;
+  } finally { btn.disabled = false; btn.textContent = "Parse with AI"; }
+}
+
+function _confirmEmailImport() {
+  const caseData = {
+    clientName: document.getElementById("ei-name")?.value?.trim() || "Unknown",
+    caseType: document.getElementById("ei-type")?.value || "Other",
+    phone: document.getElementById("ei-phone")?.value?.trim() || "",
+    email: document.getElementById("ei-email")?.value?.trim() || "",
+    dateOfIncident: document.getElementById("ei-doi")?.value || "",
+    referralSource: document.getElementById("ei-ref")?.value?.trim() || "",
+    description: document.getElementById("ei-desc")?.value?.trim() || "",
+    notes: document.getElementById("ei-notes")?.value?.trim() || "",
+  };
+
+  const newCase = addCase(caseData);
+  closeCaseModal();
+  renderKanbanBoard();
+  showToast(`Case created for ${caseData.clientName}`);
+  if (typeof onCaseCreate === "function") onCaseCreate(newCase.id);
+}
+
+// ─── Import: Attorney Share ──────────────────────────────────
+
+async function _showAttorneyShareImport() {
+  const modal = document.getElementById("case-modal");
+  const content = document.getElementById("case-modal-content");
+
+  content.innerHTML = `
+    <div class="modal-header">
+      <h2>Attorney Share</h2>
+      <button class="btn-icon" onclick="closeCaseModal()">&times;</button>
+    </div>
+    <div style="padding:0 4px">
+      <div id="attyshare-status" style="margin-bottom:12px">
+        <div class="agent-loading"><div class="spinner"></div><span>Checking connection...</span></div>
+      </div>
+      <div id="attyshare-body"></div>
+    </div>
+  `;
+  modal.classList.add("open");
+
+  // Check connection status
+  let connected = false;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+    const resp = await fetch(`${API_BASE}/api/attorney-share/connect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (resp.ok) {
+      const data = await resp.json();
+      connected = data.configured && data.success;
+    }
+  } catch { /* timeout or network error */ }
+
+  const statusEl = document.getElementById("attyshare-status");
+  const bodyEl = document.getElementById("attyshare-body");
+  if (!statusEl || !bodyEl) return;
+
+  if (connected) {
+    statusEl.innerHTML = `<div style="background:#22c55e22;border:1px solid #22c55e;padding:8px 12px;border-radius:6px;font-size:13px;color:#22c55e">✓ Attorney Share API connected</div>`;
+    bodyEl.innerHTML = `
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">
+        <strong>Webhook URL:</strong> Set this in Attorney Share webhook settings:<br>
+        <code style="background:var(--bg-card);padding:4px 8px;border-radius:4px;font-size:12px;user-select:all">https://tools.sherlawgroup.com/api/attorney-share/webhook</code>
+      </p>
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">
+        New referrals will automatically appear in the <strong>New Intake</strong> column when Attorney Share sends them via webhook.
+      </p>
+
+      <div class="settings-section" style="margin-bottom:12px">
+        <h3 style="margin:0 0 8px">Recent Attorney Share Referrals</h3>
+        <div id="attyshare-cases"><p style="color:var(--text-muted)">Loading...</p></div>
+      </div>
+
+      <div class="settings-section">
+        <h3 style="margin:0 0 8px">Manual Import (paste JSON)</h3>
+        <div class="form-group">
+          <textarea id="attyshare-json" rows="4" placeholder='{"clientName": "...", "caseType": "Auto Accident", ...}'></textarea>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="_importAttorneyShareJson()">Import JSON</button>
+      </div>
+    `;
+    _loadAttorneyShareCases();
+  } else {
+    statusEl.innerHTML = `<div style="background:var(--bg-card);padding:8px 12px;border-radius:6px;font-size:13px;color:var(--text-muted)">Attorney Share API not connected — set ATTORNEY_SHARE_API_KEY on the server</div>`;
+    bodyEl.innerHTML = `
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">
+        To connect: add your Attorney Share API key (starts with <code>attshr_</code>) as an environment variable on the server.
+      </p>
+
+      <div class="settings-section">
+        <h3 style="margin:0 0 8px">Manual Import</h3>
+        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px">
+          Paste referral data as JSON to create a case manually.
+        </p>
+        <div class="form-group">
+          <textarea id="attyshare-json" rows="8" placeholder='{"clientName": "John Doe", "caseType": "Auto Accident", "phone": "555-1234", "email": "john@email.com", "dateOfIncident": "2026-03-01", "description": "Rear-end collision..."}'></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" onclick="_importAttorneyShareJson()">Import</button>
+          <button class="btn btn-outline" onclick="closeCaseModal()">Cancel</button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+async function _loadAttorneyShareCases() {
+  const el = document.getElementById("attyshare-cases");
+  if (!el) return;
+  try {
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+    const resp = await fetch(`${API_BASE}/api/attorney-share/cases`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const cases = await resp.json();
+    if (!cases.length) {
+      el.innerHTML = `<p style="color:var(--text-muted);font-size:13px">No referrals received yet. Set up the webhook in Attorney Share to start receiving cases.</p>`;
+      return;
+    }
+    el.innerHTML = cases.slice(0, 10).map(c => `
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:600;font-size:13px">${escapeHtml(c.client_name || "")}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${escapeHtml(c.case_type || "")} — ${c.created_at ? new Date(c.created_at).toLocaleDateString() : ""}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="_importAttyShareCase('${escapeHtml(c.id)}')" style="font-size:11px;padding:2px 8px">Add to Board</button>
+      </div>
+    `).join("");
+  } catch (err) {
+    el.innerHTML = `<p style="color:var(--text-muted);font-size:13px">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function _importAttyShareCase(serverCaseId) {
+  // Fetch the case from the server and add to local CRM
+  (async () => {
+    try {
+      const token = typeof getIdToken === "function" ? await getIdToken() : null;
+      const resp = await fetch(`${API_BASE}/api/cases/${serverCaseId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const sc = await resp.json();
+
+      const caseData = {
+        clientName: sc.client_name || "Unknown",
+        caseType: sc.case_type || "Other",
+        phone: sc.phone || "",
+        email: sc.email || "",
+        dateOfIncident: sc.date_of_incident || "",
+        description: sc.description || "",
+        referralSource: "Attorney Share",
+        county: sc.county || "",
+        notes: sc.notes || "",
+      };
+
+      const newCase = addCase(caseData);
+      closeCaseModal();
+      renderKanbanBoard();
+      showToast(`Case added: ${caseData.clientName}`);
+      if (typeof onCaseCreate === "function") onCaseCreate(newCase.id);
+    } catch (err) {
+      showToast("Import failed: " + err.message, "error");
+    }
+  })();
+}
+
+function _importAttorneyShareJson() {
+  const raw = document.getElementById("attyshare-json")?.value?.trim();
+  if (!raw) { showToast("Paste referral data", "error"); return; }
+
+  try {
+    const data = JSON.parse(raw);
+    const lead = data.leadContactInfo || {};
+    const caseData = {
+      clientName: data.clientName || data.client_name || `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || "Unknown",
+      caseType: data.caseType || data.case_type || "Other",
+      phone: data.phone || lead.phone || "",
+      email: data.email || lead.email || "",
+      dob: data.dob || data.dateOfBirth || "",
+      dateOfIncident: data.dateOfIncident || data.incidentDate || "",
+      description: data.description || data.summary || "",
+      referralSource: data.referringAttorney || "Attorney Share",
+      notes: data.notes || (data.referralId ? `Attorney Share referral: ${data.referralId}` : ""),
+    };
+
+    const newCase = addCase(caseData);
+    closeCaseModal();
+    renderKanbanBoard();
+    showToast(`Case imported for ${caseData.clientName}`);
+    if (typeof onCaseCreate === "function") onCaseCreate(newCase.id);
+  } catch (err) {
+    showToast("Invalid JSON: " + err.message, "error");
   }
 }
 

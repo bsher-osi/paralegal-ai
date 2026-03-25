@@ -407,6 +407,7 @@ Request a reasonable reduction of the outstanding balance to facilitate prompt p
  * Stage-handler dispatch map.
  */
 const STAGE_HANDLERS = {
+  fee_agreement_sent: handleFeeAgreementSent,
   lor_sent: handleLorSent,
   demand_sent: handleDemandSent,
   litigation_filed: handleLitigationFiled,
@@ -439,15 +440,30 @@ function onStageChange(caseId, oldStage, newStage) {
 }
 
 /**
- * Called when a new case is created. Handles intake automation (OneDrive folder creation).
+ * FEE_AGREEMENT_SENT — No auto-action needed (case sits here waiting for signature).
+ */
+async function handleFeeAgreementSent(caseId) {
+  // Placeholder: when Adobe Sign is wired up, this will poll for signature status
+  showToast("Waiting for fee agreement signature...", "info");
+}
+
+/**
+ * Called when a new case is created. Handles intake automation:
+ * 1. Create OneDrive folder structure
+ * 2. Auto-populate fee agreement and prompt to send
  *
  * @param {string} caseId
  */
 function onCaseCreate(caseId) {
   console.log(`[caseAgents] New case created: ${caseId}`);
 
+  // OneDrive folder creation (fire-and-forget)
   handleIntake(caseId).catch((err) => {
     console.error("[caseAgents] Error in intake handler:", err);
     showToast(`Intake automation error: ${err.message}`, "error");
   });
+
+  // Prompt user to send fee agreement
+  const c = getCase(caseId);
+  showToast(`New case: ${c.clientName} — click the case card to send fee agreement`, "info");
 }
