@@ -375,7 +375,7 @@ function openCaseDetail(caseId) {
         ${c.stage === "intake" ? `<button type="button" class="btn btn-accent" style="background:#a855f7" onclick="showFeeAgreementPreview('${c.id}')">Send Fee Agreement</button>` : ""}
         ${c.stage === "fee_agreement_sent" ? `<button type="button" class="btn btn-accent" style="background:#22c55e" onclick="markAgreementSigned('${c.id}')">Agreement Signed</button>` : ""}
         ${c.stage === "fee_agreement_sent" && c.docusignEnvelopeId ? `<button type="button" class="btn btn-outline" onclick="checkAgreementStatus('${c.id}')">Check Signature</button>` : ""}
-        <button type="button" class="btn btn-outline" onclick="generateDraftForCase('${c.id}')">Draft with AI</button>
+        ${c.stage !== "fee_agreement_sent" ? `<button type="button" class="btn btn-outline" onclick="generateDraftForCase('${c.id}')">Draft with AI</button>` : ""}
         <button type="button" class="btn btn-danger" onclick="confirmDeleteCase('${c.id}')">Delete</button>
       </div>
     </form>
