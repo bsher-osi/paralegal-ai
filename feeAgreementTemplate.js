@@ -229,6 +229,13 @@ async function _sendFeeAgreement(caseId) {
       // Store agreement ID on the case for status checking
       if (result?.envelopeId) {
         updateCase(caseId, { docusignEnvelopeId: result.envelopeId });
+        // Register envelope→case mapping on backend so webhook can find it
+        try {
+          await agentApiFetch("/api/esign/register", {
+            method: "POST",
+            body: JSON.stringify({ envelopeId: result.envelopeId, caseId }),
+          });
+        } catch (_) {}
         sentViaAdobe = true;
       }
     }
@@ -286,7 +293,7 @@ async function checkAgreementStatus(caseId) {
   }
 
   try {
-    const result = await agentApiFetch(`/api/esign/check/${c.docusignEnvelopeId}`);
+    const result = await agentApiFetch(`/api/esign/status/${c.docusignEnvelopeId}`);
     if (result?.status === "completed") {
       markAgreementSigned(caseId);
       showToast("Fee agreement has been signed!", "success");
@@ -297,3 +304,39 @@ async function checkAgreementStatus(caseId) {
     showToast("Failed to check status: " + err.message, "error");
   }
 }
+
+/**
+ * Poll for completed envelopes and auto-move cases.
+ * Called on app load and periodically.
+ */
+async function pollDocuSignCompletions() {
+  try {
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+    const resp = await fetch(`${typeof API_BASE !== 'undefined' ? API_BASE : 'https://tools.sherlawgroup.com'}/api/esign/completed`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!resp.ok) return;
+    const completed = await resp.json();
+    if (!completed.length) return;
+
+    const cases = loadCases();
+    let moved = 0;
+    for (const env of completed) {
+      // Find case by envelope ID stored in localStorage
+      const c = cases.find(x => x.docusignEnvelopeId === env.envelopeId && x.stage === "fee_agreement_sent");
+      if (c) {
+        moveCaseToStage(c.id, "fee_agreement_signed");
+        moved++;
+      }
+    }
+    if (moved > 0) {
+      renderKanbanBoard();
+      showToast(`${moved} agreement(s) signed — cases updated!`, "success");
+    }
+  } catch (_) {}
+}
+
+// Poll every 30 seconds for signed agreements
+setInterval(pollDocuSignCompletions, 30000);
+// Also poll on first load (after a short delay)
+setTimeout(pollDocuSignCompletions, 3000);
