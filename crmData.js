@@ -7,6 +7,7 @@ const CASE_STAGES = [
   { id: "intake", label: "New Intake", color: "#6366f1" },
   { id: "fee_agreement_sent", label: "Fee Agreement Sent", color: "#a855f7" },
   { id: "fee_agreement_signed", label: "Agreement Signed", color: "#7c3aed" },
+  { id: "open_claims", label: "Open Claims", color: "#6d28d9" },
   { id: "lor_sent", label: "LOR Sent", color: "#8b5cf6" },
   { id: "records_collection", label: "Collecting Records", color: "#3b82f6" },
   { id: "treatment", label: "Client Treating", color: "#0ea5e9" },
@@ -254,6 +255,9 @@ function renderKanbanBoard() {
             <div class="kanban-card-type">${c.caseType}</div>
             <div class="kanban-card-name">${c.clientName}</div>
             <div class="kanban-card-date">${c.dateOfIncident ? "Incident: " + c.dateOfIncident : ""}</div>
+            ${c.claimNumber ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Claim: ${c.claimNumber}</div>` : ""}
+            ${c.insuranceCompany ? `<div style="font-size:11px;color:var(--text-muted)">3P: ${c.insuranceCompany}${c.adjusterName ? ' — ' + c.adjusterName : ''}</div>` : ""}
+            ${c.clientInsuranceCompany ? `<div style="font-size:11px;color:var(--text-muted)">1P: ${c.clientInsuranceCompany}${c.clientAdjusterName ? ' — ' + c.clientAdjusterName : ''}</div>` : ""}
             ${c.estimatedValue ? `<div class="kanban-card-value">${c.estimatedValue}</div>` : ""}
           </div>
         `
@@ -375,6 +379,7 @@ function openCaseDetail(caseId) {
         ${c.stage === "intake" ? `<button type="button" class="btn btn-accent" style="background:#a855f7" onclick="showFeeAgreementPreview('${c.id}')">Send Fee Agreement</button>` : ""}
         ${c.stage === "fee_agreement_sent" ? `<button type="button" class="btn btn-accent" style="background:#22c55e" onclick="markAgreementSigned('${c.id}')">Agreement Signed</button>` : ""}
         ${c.stage === "fee_agreement_sent" && c.docusignEnvelopeId ? `<button type="button" class="btn btn-outline" onclick="checkAgreementStatus('${c.id}')">Check Signature</button>` : ""}
+        ${c.stage === "fee_agreement_signed" ? `<button type="button" class="btn btn-accent" style="background:#6d28d9" onclick="moveCaseToStage('${c.id}','open_claims');renderKanbanBoard();closeCaseModal();showToast('Moved to Open Claims')">Open Claim</button>` : ""}
         <button type="button" class="btn btn-danger" onclick="confirmDeleteCase('${c.id}')">Delete</button>
       </div>
     </form>
