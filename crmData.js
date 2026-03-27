@@ -254,11 +254,6 @@ function renderKanbanBoard() {
                ondragstart="handleDragStart(event)" onclick="openCaseDetail('${c.id}')">
             <div class="kanban-card-type">${c.caseType}</div>
             <div class="kanban-card-name">${c.clientName}</div>
-            <div class="kanban-card-date">${c.dateOfIncident ? "Incident: " + c.dateOfIncident : ""}</div>
-            ${c.claimNumber ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Claim: ${c.claimNumber}</div>` : ""}
-            ${c.insuranceCompany ? `<div style="font-size:11px;color:var(--text-muted)">3P: ${c.insuranceCompany}${c.adjusterName ? ' — ' + c.adjusterName : ''}</div>` : ""}
-            ${c.clientInsuranceCompany ? `<div style="font-size:11px;color:var(--text-muted)">1P: ${c.clientInsuranceCompany}${c.clientAdjusterName ? ' — ' + c.clientAdjusterName : ''}</div>` : ""}
-            ${c.estimatedValue ? `<div class="kanban-card-value">${c.estimatedValue}</div>` : ""}
           </div>
         `
           )
@@ -311,13 +306,12 @@ function openCaseDetail(caseId) {
     <div class="modal-tabs">
       <button class="modal-tab active" onclick="_switchTab(this,'tab-client')">Client</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-insurance')">Insurance</button>
-      <button class="modal-tab" onclick="_switchTab(this,'tab-litigation')">Litigation</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-notes')">Notes</button>
     </div>
     <form id="case-edit-form" onsubmit="saveCaseEdit(event, '${c.id}')">
       <div id="tab-client" class="tab-pane active">
         <div class="form-grid">
-          <div class="form-group"><label>Client Name</label><input name="clientName" value="${escapeHtml(c.clientName || "")}" required /></div>
+          <div class="form-group"><label>Client Name</label><input name="clientName" value="${escapeHtml(c.clientName || "")}" /></div>
           <div class="form-group"><label>Case Type</label><select name="caseType">${CASE_TYPES.map((t) => `<option ${t === c.caseType ? "selected" : ""}>${t}</option>`).join("")}</select></div>
           <div class="form-group"><label>Phone</label><input name="phone" value="${escapeHtml(c.phone || "")}" /></div>
           <div class="form-group"><label>Email</label><input name="email" type="email" value="${escapeHtml(c.email || "")}" /></div>
@@ -333,42 +327,33 @@ function openCaseDetail(caseId) {
         <div class="form-group full-width"><label>Description</label><textarea name="description" rows="2">${escapeHtml(c.description || "")}</textarea></div>
       </div>
       <div id="tab-insurance" class="tab-pane">
-        <div style="font-weight:600;font-size:13px;color:var(--text-muted);margin-bottom:8px">AT-FAULT INSURANCE</div>
+        <div style="font-weight:600;font-size:13px;color:var(--text-muted);margin-bottom:8px">3RD PARTY (AT-FAULT) INSURANCE</div>
         <div class="form-grid">
           <div class="form-group"><label>Insurance Company</label><input name="insuranceCompany" value="${escapeHtml(c.insuranceCompany || "")}" list="az-insurers-modal" /></div>
           <div class="form-group"><label>Claim Number</label><input name="claimNumber" value="${escapeHtml(c.claimNumber || "")}" /></div>
           <div class="form-group"><label>Adjuster Name</label><input name="adjusterName" value="${escapeHtml(c.adjusterName || "")}" /></div>
-          <div class="form-group"><label>Adjuster Email</label><input name="adjusterEmail" value="${escapeHtml(c.adjusterEmail || "")}" /></div>
+          <div class="form-group"><label>Adjuster Email</label><input name="adjusterEmail" value="${escapeHtml(c.adjusterEmail || "")}" type="email" /></div>
           <div class="form-group"><label>Adjuster Fax</label><input name="adjusterFax" value="${escapeHtml(c.adjusterFax || "")}" /></div>
           <div class="form-group"><label>Insured (Driver)</label><input name="insuredName" value="${escapeHtml(c.insuredName || "")}" /></div>
         </div>
-        <div style="font-weight:600;font-size:13px;color:var(--text-muted);margin:16px 0 8px">CLIENT'S AUTO INSURANCE</div>
+        <div style="font-weight:600;font-size:13px;color:var(--text-muted);margin:16px 0 8px">1ST PARTY (CLIENT'S) INSURANCE</div>
         <div class="form-grid">
           <div class="form-group"><label>Insurance Company</label><input name="clientInsuranceCompany" value="${escapeHtml(c.clientInsuranceCompany || "")}" list="az-insurers-modal" /></div>
           <div class="form-group"><label>Claim Number</label><input name="clientClaimNumber" value="${escapeHtml(c.clientClaimNumber || "")}" /></div>
           <div class="form-group"><label>Adjuster Name</label><input name="clientAdjusterName" value="${escapeHtml(c.clientAdjusterName || "")}" /></div>
-          <div class="form-group"><label>Adjuster Email</label><input name="clientAdjusterEmail" value="${escapeHtml(c.clientAdjusterEmail || "")}" /></div>
+          <div class="form-group"><label>Adjuster Email</label><input name="clientAdjusterEmail" value="${escapeHtml(c.clientAdjusterEmail || "")}" type="email" /></div>
+          <div class="form-group"><label>Adjuster Fax</label><input name="clientAdjusterFax" value="${escapeHtml(c.clientAdjusterFax || "")}" /></div>
         </div>
         <div style="font-weight:600;font-size:13px;color:var(--text-muted);margin:16px 0 8px">HEALTH INSURANCE</div>
         <div class="form-grid">
           <div class="form-group"><label>Carrier</label><input name="healthInsuranceCarrier" value="${escapeHtml(c.healthInsuranceCarrier || "")}" /></div>
           <div class="form-group"><label>Policy Number</label><input name="healthInsurancePolicyNum" value="${escapeHtml(c.healthInsurancePolicyNum || "")}" /></div>
+          <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-top:20px">
+            <input type="checkbox" name="treatmentUnderHealthIns" id="edit-health-ins-check" value="true" ${c.treatmentUnderHealthIns === "true" || c.treatmentUnderHealthIns === true ? "checked" : ""} style="width:16px;height:16px" />
+            <label for="edit-health-ins-check" style="margin:0;font-size:13px">Treatment received under health insurance</label>
+          </div>
         </div>
         <datalist id="az-insurers-modal">${(typeof AZ_INSURERS_LIST !== 'undefined' ? AZ_INSURERS_LIST : []).map(n => `<option value="${n}">`).join('')}</datalist>
-      </div>
-      <div id="tab-litigation" class="tab-pane">
-        <div class="form-grid">
-          <div class="form-group"><label>Litigation Status</label>
-            <select name="litigationStatus">
-              ${["pre_lit","filed","served","answered","discovery","arbitration","mediation"].map(s => `<option value="${s}" ${s === (c.litigationStatus || "pre_lit") ? "selected" : ""}>${s.replace("_"," ")}</option>`).join("")}
-            </select>
-          </div>
-          <div class="form-group"><label>Case Number</label><input name="caseNumber" value="${escapeHtml(c.caseNumber || "")}" /></div>
-          <div class="form-group"><label>County</label><input name="county" value="${escapeHtml(c.county || "Maricopa")}" /></div>
-          <div class="form-group"><label>Defendant Attorney</label><input name="defendantAttorney" value="${escapeHtml(c.defendantAttorney || "")}" /></div>
-          <div class="form-group"><label>Def. Attorney Email</label><input name="defendantAttorneyEmail" value="${escapeHtml(c.defendantAttorneyEmail || "")}" /></div>
-          <div class="form-group"><label>Arbitrator</label><input name="arbitratorName" value="${escapeHtml(c.arbitratorName || "")}" /></div>
-        </div>
       </div>
       <div id="tab-notes" class="tab-pane">
         <div class="form-group full-width"><label>Notes</label><textarea name="notes" rows="6">${escapeHtml(c.notes || "")}</textarea></div>
@@ -443,24 +428,36 @@ function openNewCaseForm() {
         </div>
       </div>
       <div id="ntab-insurance" class="tab-pane">
-        <div style="font-weight:600;font-size:13px;color:var(--text-muted);margin-bottom:8px">AT-FAULT INSURANCE</div>
+        <div style="font-weight:600;font-size:13px;color:var(--text-muted);margin-bottom:8px">3RD PARTY (AT-FAULT) INSURANCE</div>
         <div class="form-grid">
           <div class="form-group"><label>Insurance Company</label><input name="insuranceCompany" list="az-insurers-new" /></div>
           <div class="form-group"><label>Claim Number</label><input name="claimNumber" /></div>
           <div class="form-group"><label>Adjuster Name</label><input name="adjusterName" /></div>
-          <div class="form-group"><label>Adjuster Email</label><input name="adjusterEmail" /></div>
-          <div class="form-group"><label>Insured (Driver)</label><input name="insuredName" /></div>
+          <div class="form-group"><label>Adjuster Email</label><input name="adjusterEmail" type="email" /></div>
           <div class="form-group"><label>Adjuster Fax</label><input name="adjusterFax" /></div>
+          <div class="form-group"><label>Insured (Driver)</label><input name="insuredName" /></div>
         </div>
-        <div style="font-weight:600;font-size:13px;color:var(--text-muted);margin:16px 0 8px">CLIENT'S INSURANCE</div>
+        <div style="font-weight:600;font-size:13px;color:var(--text-muted);margin:16px 0 8px">1ST PARTY (CLIENT'S) INSURANCE</div>
         <div class="form-grid">
           <div class="form-group"><label>Auto Insurance</label><input name="clientInsuranceCompany" list="az-insurers-new" /></div>
-          <div class="form-group"><label>Health Insurance</label><input name="healthInsuranceCarrier" /></div>
+          <div class="form-group"><label>Claim Number</label><input name="clientClaimNumber" /></div>
+          <div class="form-group"><label>Adjuster Name</label><input name="clientAdjusterName" /></div>
+          <div class="form-group"><label>Adjuster Email</label><input name="clientAdjusterEmail" type="email" /></div>
+          <div class="form-group"><label>Adjuster Fax</label><input name="clientAdjusterFax" /></div>
+        </div>
+        <div style="font-weight:600;font-size:13px;color:var(--text-muted);margin:16px 0 8px">HEALTH INSURANCE</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Health Insurance Carrier</label><input name="healthInsuranceCarrier" /></div>
+          <div class="form-group"><label>Policy Number</label><input name="healthInsurancePolicyNum" /></div>
+          <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-top:20px">
+            <input type="checkbox" name="treatmentUnderHealthIns" id="new-health-ins-check" value="true" style="width:16px;height:16px" />
+            <label for="new-health-ins-check" style="margin:0;font-size:13px">Treatment received under health insurance</label>
+          </div>
         </div>
         <datalist id="az-insurers-new">${AZ_INSURERS_LIST.map(n => `<option value="${n}">`).join('')}</datalist>
       </div>
       <div id="ntab-notes" class="tab-pane">
-        <div class="form-group full-width"><label>Description *</label><textarea name="description" rows="3" required></textarea></div>
+        <div class="form-group full-width"><label>Description</label><textarea name="description" rows="3"></textarea></div>
         <div class="form-group full-width"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
       </div>
       <div class="modal-actions">
