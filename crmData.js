@@ -5,8 +5,8 @@ const CRM_STORAGE_KEY = "paralegal_crm_cases";
 
 const CASE_STAGES = [
   { id: "intake", label: "New Intake", color: "#6366f1" },
-  { id: "fee_agreement_sent", label: "Fee Agmt Sent", color: "#a855f7" },
-  { id: "fee_agreement_signed", label: "Agmt Signed", color: "#7c3aed" },
+  { id: "fee_agreement_sent", label: "Fee Agreement Sent", color: "#a855f7" },
+  { id: "fee_agreement_signed", label: "Agreement Signed", color: "#7c3aed" },
   { id: "lor_sent", label: "LOR Sent", color: "#8b5cf6" },
   { id: "records_collection", label: "Collecting Records", color: "#3b82f6" },
   { id: "treatment", label: "Client Treating", color: "#0ea5e9" },
@@ -375,7 +375,6 @@ function openCaseDetail(caseId) {
         ${c.stage === "intake" ? `<button type="button" class="btn btn-accent" style="background:#a855f7" onclick="showFeeAgreementPreview('${c.id}')">Send Fee Agreement</button>` : ""}
         ${c.stage === "fee_agreement_sent" ? `<button type="button" class="btn btn-accent" style="background:#22c55e" onclick="markAgreementSigned('${c.id}')">Agreement Signed</button>` : ""}
         ${c.stage === "fee_agreement_sent" && c.docusignEnvelopeId ? `<button type="button" class="btn btn-outline" onclick="checkAgreementStatus('${c.id}')">Check Signature</button>` : ""}
-        ${c.stage !== "fee_agreement_sent" ? `<button type="button" class="btn btn-outline" onclick="generateDraftForCase('${c.id}')">Draft with AI</button>` : ""}
         <button type="button" class="btn btn-danger" onclick="confirmDeleteCase('${c.id}')">Delete</button>
       </div>
     </form>
@@ -426,13 +425,13 @@ function openNewCaseForm() {
     <form id="new-case-form" onsubmit="submitNewCase(event)">
       <div id="ntab-client" class="tab-pane active">
         <div class="form-grid">
-          <div class="form-group"><label>Client Name *</label><input name="clientName" required /></div>
-          <div class="form-group"><label>Case Type *</label><select name="caseType">${CASE_TYPES.map((t) => `<option>${t}</option>`).join("")}</select></div>
+          <div class="form-group"><label>Client Name</label><input name="clientName" /></div>
+          <div class="form-group"><label>Case Type</label><select name="caseType">${CASE_TYPES.map((t) => `<option>${t}</option>`).join("")}</select></div>
           <div class="form-group"><label>Phone</label><input name="phone" /></div>
           <div class="form-group"><label>Email</label><input name="email" type="email" /></div>
           <div class="form-group"><label>Date of Birth</label><input name="dob" type="date" /></div>
           <div class="form-group"><label>Address</label><input name="address" /></div>
-          <div class="form-group"><label>Date of Incident *</label><input name="dateOfIncident" type="date" required /></div>
+          <div class="form-group"><label>Date of Incident</label><input name="dateOfIncident" type="date" /></div>
           <div class="form-group"><label>SOL</label><input name="statuteOfLimitations" type="date" /></div>
           <div class="form-group"><label>Referral Source</label><input name="referralSource" /></div>
           <div class="form-group"><label>Driver's License</label><input name="driverLicense" /></div>

@@ -457,13 +457,16 @@ async function handleFeeAgreementSent(caseId) {
 function onCaseCreate(caseId) {
   console.log(`[caseAgents] New case created: ${caseId}`);
 
-  // OneDrive folder creation (fire-and-forget)
-  handleIntake(caseId).catch((err) => {
-    console.error("[caseAgents] Error in intake handler:", err);
-    showToast(`Intake automation error: ${err.message}`, "error");
-  });
+  // OneDrive folder creation — DISABLED for now
+  // handleIntake(caseId).catch((err) => {
+  //   console.error("[caseAgents] Error in intake handler:", err);
+  //   showToast(`Intake automation error: ${err.message}`, "error");
+  // });
 
   // Prompt user to send fee agreement
-  const c = getCase(caseId);
-  showToast(`New case: ${c.clientName} — click the case card to send fee agreement`, "info");
+  const cases = typeof loadCases === "function" ? loadCases() : [];
+  const c = cases.find(x => x.id === caseId);
+  if (c) {
+    showToast(`New case: ${c.clientName} — click the case card to send fee agreement`, "info");
+  }
 }
