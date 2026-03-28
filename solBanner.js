@@ -24,7 +24,7 @@ function _renderSolBanner() {
       const diff = Math.ceil((sol - today) / (1000 * 60 * 60 * 24));
       return { ...c, diffDays: diff, solDate: sol };
     })
-    .filter(c => c.diffDays >= 0 && c.diffDays <= 90)
+    .filter(c => c.diffDays >= 0 && c.diffDays <= 30)
     .sort((a, b) => a.diffDays - b.diffDays);
 
   if (!upcoming.length) {

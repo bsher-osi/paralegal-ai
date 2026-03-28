@@ -5,6 +5,8 @@
 const CALENDAR_API_BASE = "https://tools.sherlawgroup.com";
 
 let _deadlinesCache = [];
+let _calendarFilter = 180; // active day-range filter (null = show all)
+let _calendarSort   = "asc"; // "asc" | "desc"
 
 // ─── Rendering ────────────────────────────────────────────────────
 
@@ -13,11 +15,27 @@ function renderCalendarPanel() {
   if (!container) return;
 
   container.innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" onclick="syncDeadlinesFromCases()">Sync SOLs from Cases</button>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary btn-sm" onclick="syncDeadlinesFromCases()">↻ Sync SOLs</button>
       <button class="btn btn-outline btn-sm" onclick="showAddDeadlineForm()">+ Add Deadline</button>
       <button class="btn btn-outline btn-sm" onclick="fetchAndRenderDeadlines()">Refresh</button>
     </div>
+
+    <!-- Filter bar -->
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:12px;color:var(--text-muted);margin-right:2px">Filter:</span>
+      ${[7,15,30,90,180].map(d => `
+        <button id="cal-filter-${d}" class="btn btn-sm cal-filter-btn ${_calendarFilter===d?'cal-filter-active':''}"
+          onclick="_setCalFilter(${d})">${d} days</button>
+      `).join("")}
+      <button id="cal-filter-null" class="btn btn-sm cal-filter-btn ${_calendarFilter===null?'cal-filter-active':''}"
+        onclick="_setCalFilter(null)">All</button>
+      <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">Sort:</span>
+      <button class="btn btn-sm btn-outline" onclick="_toggleCalSort()" title="Toggle sort order" id="cal-sort-btn">
+        ${_calendarSort==="asc" ? "↑ Soonest" : "↓ Latest"}
+      </button>
+    </div>
+
     <div id="add-deadline-form-area"></div>
     <div id="deadlines-list">
       <p style="color:var(--text-muted)">Loading deadlines...</p>
@@ -26,6 +44,28 @@ function renderCalendarPanel() {
 
   // Auto-sync SOLs from cases every time the calendar is opened
   syncDeadlinesFromCases();
+}
+
+function _setCalFilter(days) {
+  _calendarFilter = days;
+  // Update button styles
+  [7,15,30,90,180].forEach(d => {
+    const btn = document.getElementById(`cal-filter-${d}`);
+    if (btn) btn.classList.toggle("cal-filter-active", days === d);
+  });
+  const allBtn = document.getElementById("cal-filter-null");
+  if (allBtn) allBtn.classList.toggle("cal-filter-active", days === null);
+
+  const list = document.getElementById("deadlines-list");
+  if (list) _renderDeadlinesList(list);
+}
+
+function _toggleCalSort() {
+  _calendarSort = _calendarSort === "asc" ? "desc" : "asc";
+  const btn = document.getElementById("cal-sort-btn");
+  if (btn) btn.textContent = _calendarSort === "asc" ? "↑ Soonest" : "↓ Latest";
+  const list = document.getElementById("deadlines-list");
+  if (list) _renderDeadlinesList(list);
 }
 
 async function fetchAndRenderDeadlines() {
@@ -47,25 +87,46 @@ async function fetchAndRenderDeadlines() {
 
 function _renderDeadlinesList(container) {
   if (!_deadlinesCache.length) {
-    container.innerHTML = `<p style="color:var(--text-muted)">No deadlines yet. Click "Sync from Cases" to auto-generate SOL deadlines, or add one manually.</p>`;
+    container.innerHTML = `<p style="color:var(--text-muted)">No deadlines yet. Click "Sync SOLs" to auto-generate from cases, or add one manually.</p>`;
     return;
   }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const html = _deadlinesCache.map(dl => {
-    const dlDate = new Date(dl.date + "T00:00:00");
+  // Annotate with diffDays
+  let items = _deadlinesCache.map(dl => {
+    const dlDate  = new Date(dl.date + "T00:00:00");
     const diffDays = Math.ceil((dlDate - today) / (1000 * 60 * 60 * 24));
+    return { ...dl, dlDate, diffDays };
+  });
+
+  // Apply filter
+  if (_calendarFilter !== null) {
+    items = items.filter(dl => dl.diffDays >= 0 && dl.diffDays <= _calendarFilter);
+  }
+
+  if (!items.length) {
+    container.innerHTML = `<p style="color:var(--text-muted)">No deadlines within the selected range.</p>`;
+    return;
+  }
+
+  // Apply sort
+  items.sort((a, b) => _calendarSort === "asc"
+    ? a.diffDays - b.diffDays
+    : b.diffDays - a.diffDays);
+
+  const html = items.map(dl => {
+    const { dlDate, diffDays } = dl;
     const isPast = diffDays < 0;
 
     let urgency = "safe";
-    if (diffDays < 0) urgency = "past";
-    else if (diffDays <= 30) urgency = "urgent";
-    else if (diffDays <= 90) urgency = "warning";
+    if (diffDays < 0)   urgency = "past";
+    else if (diffDays <= 15)  urgency = "urgent";
+    else if (diffDays <= 30)  urgency = "warning";
 
-    const badge = _typeBadge(dl.type);
-    const dateStr = dlDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+    const badge    = _typeBadge(dl.type);
+    const dateStr  = dlDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
     const daysLabel = isPast
       ? `<span style="color:var(--danger);font-weight:600">${Math.abs(diffDays)} days ago</span>`
       : diffDays === 0
@@ -84,7 +145,7 @@ function _renderDeadlinesList(container) {
           </div>
           ${dl.notes ? `<div class="deadline-notes">${escapeHtml(dl.notes)}</div>` : ""}
         </div>
-        <button class="btn btn-sm" onclick="deleteDeadline('${dl.id}')" style="padding:2px 8px;font-size:11px;color:var(--text-muted)" title="Delete">X</button>
+        <button class="btn btn-sm" onclick="deleteDeadline('${dl.id}')" style="padding:2px 8px;font-size:11px;color:var(--text-muted)" title="Delete">✕</button>
       </div>
     `;
   }).join("");
@@ -102,7 +163,7 @@ function _typeBadge(type) {
     demand_response: "#3b82f6", custom: "#6b7280",
   };
   const label = labels[type] || type;
-  const color = colors[type] || "#6b7280";
+  const color  = colors[type] || "#6b7280";
   return `<span class="deadline-badge" style="background:${color}">${label}</span>`;
 }
 
@@ -180,7 +241,7 @@ function showAddDeadlineForm() {
 
 async function submitAddDeadline() {
   const title = document.getElementById("dl-title")?.value?.trim();
-  const date = document.getElementById("dl-date")?.value?.trim();
+  const date  = document.getElementById("dl-date")?.value?.trim();
   const caseSelect = document.getElementById("dl-case");
   const notes = document.getElementById("dl-notes")?.value?.trim();
 
@@ -189,7 +250,7 @@ async function submitAddDeadline() {
     return;
   }
 
-  const caseId = caseSelect?.value || "";
+  const caseId     = caseSelect?.value || "";
   const clientName = caseSelect?.selectedOptions[0]?.dataset?.name || "";
 
   const token = typeof getIdToken === "function" ? await getIdToken() : null;

@@ -827,6 +827,28 @@ h1, h2, h3, h4, .logo span, .modal-tab, .btn {
 
 .deadline-days { margin-left: auto; }
 
+/* Calendar filter buttons */
+.cal-filter-btn {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cal-filter-btn:hover {
+  border-color: var(--slg-teal);
+  color: var(--slg-teal);
+}
+.cal-filter-btn.cal-filter-active {
+  background: var(--slg-teal);
+  border-color: var(--slg-teal);
+  color: #fff;
+  font-weight: 600;
+}
+
 .deadline-notes {
   font-size: 12px;
   color: var(--text-muted);
