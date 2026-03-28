@@ -309,6 +309,7 @@ function openCaseDetail(caseId) {
       <button class="modal-tab" onclick="_switchTab(this,'tab-welcome')">Welcome Call</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-phone')">Phone Notes</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-notes')">Notes</button>
+      ${c.stage === "open_claims" || c.stage === "lor_sent" ? `<button class="modal-tab lor-tab" onclick="_switchTab(this,'tab-lor')" style="border-bottom:2px solid var(--slg-orange);color:var(--slg-orange)">📨 LOR</button>` : ""}
     </div>
     <form id="case-edit-form" onsubmit="saveCaseEdit(event, '${c.id}')">
       <div id="tab-client" class="tab-pane active">
@@ -350,6 +351,8 @@ function openCaseDetail(caseId) {
         <div class="form-grid">
           <div class="form-group"><label>Carrier</label><input name="healthInsuranceCarrier" value="${escapeHtml(c.healthInsuranceCarrier || "")}" /></div>
           <div class="form-group"><label>Policy Number</label><input name="healthInsurancePolicyNum" value="${escapeHtml(c.healthInsurancePolicyNum || "")}" /></div>
+          <div class="form-group"><label>Adjuster Email</label><input name="healthInsuranceEmail" type="email" value="${escapeHtml(c.healthInsuranceEmail || "")}" /></div>
+          <div class="form-group"><label>Adjuster Fax</label><input name="healthInsuranceFax" value="${escapeHtml(c.healthInsuranceFax || "")}" /></div>
           <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-top:20px">
             <input type="checkbox" name="treatmentUnderHealthIns" id="edit-health-ins-check" value="true" ${c.treatmentUnderHealthIns === "true" || c.treatmentUnderHealthIns === true ? "checked" : ""} style="width:16px;height:16px" />
             <label for="edit-health-ins-check" style="margin:0;font-size:13px">Treatment received under health insurance</label>
@@ -357,6 +360,10 @@ function openCaseDetail(caseId) {
         </div>
         <datalist id="az-insurers-modal">${(typeof AZ_INSURERS_LIST !== 'undefined' ? AZ_INSURERS_LIST : []).map(n => `<option value="${n}">`).join('')}</datalist>
       </div>
+      ${c.stage === "open_claims" || c.stage === "lor_sent" ? `
+      <div id="tab-lor" class="tab-pane">
+        ${_buildLorTabHtml(c)}
+      </div>` : ""}
       <div id="tab-welcome" class="tab-pane">
         <div class="form-group full-width">
           <label>Welcome Call Notes</label>
@@ -381,6 +388,7 @@ function openCaseDetail(caseId) {
         ${c.stage === "fee_agreement_sent" ? `<button type="button" class="btn btn-accent" style="background:#22c55e" onclick="markAgreementSigned('${c.id}')">Agreement Signed</button>` : ""}
         ${c.stage === "fee_agreement_sent" && c.docusignEnvelopeId ? `<button type="button" class="btn btn-outline" onclick="checkAgreementStatus('${c.id}')">Check Signature</button>` : ""}
         ${c.stage === "fee_agreement_signed" ? `<button type="button" class="btn btn-accent" style="background:#6d28d9" onclick="moveCaseToStage('${c.id}','open_claims');renderKanbanBoard();closeCaseModal();showToast('Moved to Open Claims')">Open Claim</button>` : ""}
+        ${c.stage === "open_claims" ? `<button type="button" class="btn btn-accent" style="background:var(--slg-orange)" onclick="_switchTab(document.querySelector('.lor-tab'),'tab-lor')">📨 Send LORs</button>` : ""}
         <button type="button" class="btn btn-danger" onclick="confirmDeleteCase('${c.id}')">Delete</button>
       </div>
     </form>
@@ -807,6 +815,115 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ─── LOR Tab ─────────────────────────────────────────────────
+
+function _buildLorTabHtml(c) {
+  const alreadySent = c.stage === "lor_sent";
+  const lorLog      = c.lorSentLog || [];  // array of {type, method, sentAt}
+
+  function lorRow(key, label, email, fax, sentEntry) {
+    const sent      = sentEntry ? `<span class="lor-sent-badge">✓ Sent ${new Date(sentEntry.sentAt).toLocaleDateString()} via ${sentEntry.method}</span>` : "";
+    const emailOk   = !!email;
+    const faxOk     = !!fax;
+    const noContact = !emailOk && !faxOk;
+    return `
+      <div class="lor-row" id="lor-row-${key}">
+        <label class="lor-check-label">
+          <input type="checkbox" id="lor-chk-${key}" onchange="_lorToggleRow('${key}')" ${sentEntry ? "checked disabled" : ""}>
+          <span>${label}</span>
+          ${sent}
+        </label>
+        <div class="lor-delivery" id="lor-delivery-${key}" style="display:${sentEntry ? "none" : "none"}">
+          ${noContact ? `<div class="lor-warn">⚠ No email or fax on file — add them in the Insurance tab first.</div>` : `
+          <div class="lor-method-row">
+            ${emailOk ? `<label class="lor-method-opt"><input type="radio" name="lorMethod-${key}" value="email" checked> Email <span class="lor-contact-val">${escapeHtml(email)}</span></label>` : ""}
+            ${faxOk   ? `<label class="lor-method-opt"><input type="radio" name="lorMethod-${key}" value="fax" ${!emailOk?"checked":""}> Fax <span class="lor-contact-val">${escapeHtml(fax)}</span></label>` : ""}
+          </div>`}
+        </div>
+      </div>`;
+  }
+
+  const log1p  = lorLog.find(l => l.type === "1st_party");
+  const log3p  = lorLog.find(l => l.type === "3rd_party");
+  const logHi  = lorLog.find(l => l.type === "health_ins");
+
+  return `
+    <div style="margin-bottom:12px">
+      <div style="font-weight:700;font-size:14px;color:var(--text-primary);margin-bottom:4px">Letter of Representation</div>
+      <div style="font-size:12px;color:var(--text-muted)">Select which parties to send an LOR to, choose delivery method, then click Send.</div>
+    </div>
+    <div class="lor-list">
+      ${lorRow("3rd_party","3rd Party (At-Fault Insurance)", c.adjusterEmail, c.adjusterFax, log3p)}
+      ${lorRow("1st_party","1st Party (Client's Insurance)",  c.clientAdjusterEmail, c.clientAdjusterFax, log1p)}
+      ${lorRow("health_ins","Medical / Health Insurance",     c.healthInsuranceEmail, c.healthInsuranceFax, logHi)}
+    </div>
+    ${alreadySent ? "" : `
+    <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
+      <button type="button" class="btn btn-primary" style="background:var(--slg-orange);border-color:var(--slg-orange)" onclick="sendLORs('${c.id}')">📨 Send Selected LORs</button>
+      <span id="lor-sending-msg" style="font-size:12px;color:var(--text-muted)"></span>
+    </div>`}
+  `;
+}
+
+function _lorToggleRow(key) {
+  const chk      = document.getElementById(`lor-chk-${key}`);
+  const delivery = document.getElementById(`lor-delivery-${key}`);
+  if (delivery) delivery.style.display = chk.checked ? "block" : "none";
+}
+
+async function sendLORs(caseId) {
+  const cases = loadCases();
+  const c     = cases.find(x => x.id === caseId);
+  if (!c) return;
+
+  const types = ["3rd_party", "1st_party", "health_ins"];
+  const toSend = [];
+
+  for (const key of types) {
+    const chk = document.getElementById(`lor-chk-${key}`);
+    if (!chk || !chk.checked || chk.disabled) continue;
+
+    const methodEl = document.querySelector(`input[name="lorMethod-${key}"]:checked`);
+    const method   = methodEl ? methodEl.value : null;
+    if (!method) { showToast(`Select email or fax for ${key.replace("_"," ")}`, "error"); return; }
+
+    // Resolve contact value
+    let contact = "";
+    if (key === "3rd_party")  contact = method === "email" ? c.adjusterEmail       : c.adjusterFax;
+    if (key === "1st_party")  contact = method === "email" ? c.clientAdjusterEmail : c.clientAdjusterFax;
+    if (key === "health_ins") contact = method === "email" ? c.healthInsuranceEmail : c.healthInsuranceFax;
+
+    if (!contact) { showToast(`No ${method} on file for ${key.replace("_"," ")}`, "error"); return; }
+    toSend.push({ type: key, method, contact });
+  }
+
+  if (!toSend.length) { showToast("Check at least one party to send an LOR to", "error"); return; }
+
+  const msg = document.getElementById("lor-sending-msg");
+  if (msg) msg.textContent = "Sending…";
+
+  const token = typeof getIdToken === "function" ? await getIdToken() : null;
+  try {
+    const resp = await fetch("https://tools.sherlawgroup.com/api/lor/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ case_id: caseId, case_data: c, recipients: toSend }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    // Log sent entries
+    const sentAt  = new Date().toISOString();
+    const lorLog  = [...(c.lorSentLog || []), ...toSend.map(t => ({ ...t, sentAt }))];
+    updateCase(caseId, { lorSentLog: lorLog, stage: "lor_sent" });
+    renderKanbanBoard();
+    closeCaseModal();
+    showToast(`LOR${toSend.length > 1 ? "s" : ""} sent — case moved to LOR Sent`);
+  } catch (err) {
+    if (msg) msg.textContent = "";
+    showToast("Send failed: " + err.message, "error");
+  }
 }
 
 // Tab switching for case modal
