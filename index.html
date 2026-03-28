@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Paralegal AI — Personal Injury Case Management</title>
+  <title>Sher Law Group — Case Management</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -11,8 +11,11 @@
     <!-- ─── Header ──────────────────────────────────────── -->
     <header class="app-header">
       <div class="logo">
-        <div class="logo-icon">&#9878;</div>
-        <span>Paralegal AI</span>
+        <div class="logo-icon" style="background:var(--slg-orange);font-size:16px;font-weight:700;font-family:'Poppins',sans-serif;color:#fff;letter-spacing:-0.5px">SLG</div>
+        <div>
+          <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;color:#fff;line-height:1.1">Sher Law Group</div>
+          <div style="font-size:10px;color:var(--slg-teal);letter-spacing:0.12em;text-transform:uppercase;font-weight:600">Case Management</div>
+        </div>
       </div>
       <div class="header-actions">
         <span id="user-display"></span>
@@ -27,9 +30,10 @@
 
     <!-- ─── Auth Gate (shown when not signed in) ────────── -->
     <div id="auth-gate" class="auth-gate">
-      <div class="logo-icon" style="width:64px;height:64px;font-size:36px;border-radius:16px;background:var(--accent);display:flex;align-items:center;justify-content:center">&#9878;</div>
-      <h2>Paralegal AI Agent</h2>
-      <p>Personal injury case management with AI-powered document drafting. Sign in with your Microsoft 365 account to access email, calendar, and file integrations.</p>
+      <div style="width:72px;height:72px;border-radius:16px;background:var(--slg-orange);display:flex;align-items:center;justify-content:center;font-family:'Poppins',sans-serif;font-weight:700;font-size:24px;color:#fff;letter-spacing:-1px;box-shadow:0 4px 20px rgba(255,125,33,0.4)">SLG</div>
+      <h2 style="font-family:'Poppins',sans-serif;font-weight:700">Sher Law Group</h2>
+      <p style="color:var(--slg-teal);font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-size:12px;margin-bottom:4px">Injury Attorneys · Case Management</p>
+      <p>AI-powered case management for your personal injury practice. Sign in with your Microsoft 365 account to access email, calendar, and file integrations.</p>
       <button class="btn btn-primary" onclick="signIn()" style="padding:12px 32px;font-size:16px">
         Sign in with Microsoft 365
       </button>
@@ -83,9 +87,6 @@
           <li><a onclick="switchPanel('contact')" data-panel="contact">
             <span class="nav-icon">&#128222;</span><span>Contact Log</span>
           </a></li>
-          <li><a onclick="switchPanel('litigation')" data-panel="litigation">
-            <span class="nav-icon">&#9878;</span><span>Litigation</span>
-          </a></li>
           <li><a onclick="switchPanel('research')" data-panel="research">
             <span class="nav-icon">&#128269;</span><span>Legal Research</span>
           </a></li>
@@ -103,6 +104,16 @@
 
       <!-- Content Panels -->
       <main class="main-content">
+        <!-- ─── SOL Alert Banner ───────────────────────────── -->
+        <div id="sol-banner" style="display:none">
+          <div class="sol-banner-inner">
+            <span class="sol-banner-label">&#9888; SOL</span>
+            <div class="sol-ticker-wrap">
+              <div id="sol-ticker-track" class="sol-ticker-track"></div>
+            </div>
+            <button id="sol-brief-btn" class="sol-brief-btn" onclick="sendSolDailyBrief()" title="Email daily SOL brief to info@sherlawgroup.com">Send Brief</button>
+          </div>
+        </div>
         <!-- CRM / Kanban Panel -->
         <div id="panel-crm" class="panel active">
           <div class="panel-header">
@@ -291,6 +302,7 @@
   <script src="litigationPanel.js"></script>
   <script src="caseAgents.js"></script>
   <script src="feeAgreementTemplate.js"></script>
+  <script src="solBanner.js"></script>
   <script>
     // ─── App Initialization ────────────────────────────────
 
@@ -311,6 +323,7 @@
       renderKanbanBoard();
       renderAgentPanel();
       updateSettingsPanel();
+      initSolBanner();
     });
 
     // ─── Panel Switching ───────────────────────────────────

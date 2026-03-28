@@ -306,6 +306,8 @@ function openCaseDetail(caseId) {
     <div class="modal-tabs">
       <button class="modal-tab active" onclick="_switchTab(this,'tab-client')">Client</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-insurance')">Insurance</button>
+      <button class="modal-tab" onclick="_switchTab(this,'tab-welcome')">Welcome Call</button>
+      <button class="modal-tab" onclick="_switchTab(this,'tab-phone')">Phone Notes</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-notes')">Notes</button>
     </div>
     <form id="case-edit-form" onsubmit="saveCaseEdit(event, '${c.id}')">
@@ -354,6 +356,20 @@ function openCaseDetail(caseId) {
           </div>
         </div>
         <datalist id="az-insurers-modal">${(typeof AZ_INSURERS_LIST !== 'undefined' ? AZ_INSURERS_LIST : []).map(n => `<option value="${n}">`).join('')}</datalist>
+      </div>
+      <div id="tab-welcome" class="tab-pane">
+        <div class="form-group full-width">
+          <label>Welcome Call Notes</label>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Notes from the initial welcome call with the client — intake details, injuries, how accident happened, etc.</div>
+          <textarea name="welcomeCallNotes" rows="12" style="font-family:inherit">${escapeHtml(c.welcomeCallNotes || "")}</textarea>
+        </div>
+      </div>
+      <div id="tab-phone" class="tab-pane">
+        <div class="form-group full-width">
+          <label>Phone Notes</label>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Log of all phone interactions with the client, insurance, medical providers, etc.</div>
+          <textarea name="phoneNotes" rows="12" style="font-family:inherit">${escapeHtml(c.phoneNotes || "")}</textarea>
+        </div>
       </div>
       <div id="tab-notes" class="tab-pane">
         <div class="form-group full-width"><label>Notes</label><textarea name="notes" rows="6">${escapeHtml(c.notes || "")}</textarea></div>

@@ -401,6 +401,72 @@ Request a reasonable reduction of the outstanding balance to facilitate prompt p
   }
 }
 
+// ─── Agreement Signed — Create OneDrive Folder ───────────────
+
+/**
+ * FEE_AGREEMENT_SIGNED — Create OneDrive folder structure for the case.
+ * Location: OneDrive - Sher Law Group / Pre-Lit / Clients / {ClientName}
+ * Subfolders: Correspondence, Costs, Intake, Investigation, Medical Records, Property Damage
+ */
+async function handleAgreementSigned(caseId) {
+  const c = getCase(caseId);
+  const clientName = (c.clientName || "Unknown Client").trim();
+
+  if (typeof graphFetch !== "function") {
+    console.warn("[caseAgents] graphFetch not available — OneDrive skipped");
+    return;
+  }
+
+  // Helper: create a folder, silently ignore 409 Conflict (already exists)
+  async function mkdirGraph(path, name) {
+    try {
+      await graphFetch(`${path}:/children`, {
+        method: "POST",
+        body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+      });
+    } catch (e) {
+      if (!String(e.message).includes("409") && !String(e.message).includes("nameAlreadyExists")) throw e;
+    }
+  }
+
+  try {
+    // Ensure parent structure exists: Pre-Lit → Clients
+    await mkdirGraph("/me/drive/root:", "Pre-Lit");
+    await mkdirGraph("/me/drive/root:/Pre-Lit:", "Clients");
+
+    // Create the client folder
+    const clientPath = `/me/drive/root:/Pre-Lit/Clients/${clientName}:`;
+    await mkdirGraph("/me/drive/root:/Pre-Lit/Clients:", clientName);
+
+    // Create subfolders in parallel
+    const subfolders = [
+      "Correspondence",
+      "Costs",
+      "Intake",
+      "Investigation",
+      "Medical Records",
+      "Property Damage",
+    ];
+
+    await Promise.allSettled(
+      subfolders.map((name) =>
+        graphFetch(`${clientPath}/children`, {
+          method: "POST",
+          body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+        }).catch((e) => {
+          if (!String(e.message).includes("409") && !String(e.message).includes("nameAlreadyExists")) throw e;
+        })
+      )
+    );
+
+    showToast(`OneDrive folder created: Pre-Lit/Clients/${clientName}`, "success");
+    console.log(`[caseAgents] OneDrive folder created for ${clientName}`);
+  } catch (err) {
+    console.error("[caseAgents] OneDrive folder creation failed:", err);
+    showToast(`OneDrive folder failed: ${err.message}`, "error");
+  }
+}
+
 // ─── Main Dispatcher ─────────────────────────────────────────
 
 /**
@@ -408,6 +474,7 @@ Request a reasonable reduction of the outstanding balance to facilitate prompt p
  */
 const STAGE_HANDLERS = {
   fee_agreement_sent: handleFeeAgreementSent,
+  fee_agreement_signed: handleAgreementSigned,
   lor_sent: handleLorSent,
   demand_sent: handleDemandSent,
   litigation_filed: handleLitigationFiled,

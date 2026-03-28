@@ -14,7 +14,7 @@ function renderCalendarPanel() {
 
   container.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" onclick="syncDeadlinesFromCases()">Sync from Cases</button>
+      <button class="btn btn-primary btn-sm" onclick="syncDeadlinesFromCases()">Sync SOLs from Cases</button>
       <button class="btn btn-outline btn-sm" onclick="showAddDeadlineForm()">+ Add Deadline</button>
       <button class="btn btn-outline btn-sm" onclick="fetchAndRenderDeadlines()">Refresh</button>
     </div>
@@ -24,7 +24,8 @@ function renderCalendarPanel() {
     </div>
   `;
 
-  fetchAndRenderDeadlines();
+  // Auto-sync SOLs from cases every time the calendar is opened
+  syncDeadlinesFromCases();
 }
 
 async function fetchAndRenderDeadlines() {
