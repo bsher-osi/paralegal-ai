@@ -388,7 +388,7 @@ function openCaseDetail(caseId) {
         ${c.stage === "fee_agreement_sent" ? `<button type="button" class="btn btn-accent" style="background:#22c55e" onclick="markAgreementSigned('${c.id}')">Agreement Signed</button>` : ""}
         ${c.stage === "fee_agreement_sent" && c.docusignEnvelopeId ? `<button type="button" class="btn btn-outline" onclick="checkAgreementStatus('${c.id}')">Check Signature</button>` : ""}
         ${c.stage === "fee_agreement_signed" ? `<button type="button" class="btn btn-accent" style="background:#6d28d9" onclick="moveCaseToStage('${c.id}','open_claims');renderKanbanBoard();closeCaseModal();showToast('Moved to Open Claims')">Open Claim</button>` : ""}
-        ${c.stage === "open_claims" ? `<button type="button" class="btn btn-accent" style="background:var(--slg-orange)" onclick="_switchTab(document.querySelector('.lor-tab'),'tab-lor')">📨 Send LORs</button>` : ""}
+        ${c.stage === "open_claims" ? `<button type="button" class="btn btn-accent" style="background:var(--slg-orange)" onclick="sendLORs('${c.id}')">📨 Send LORs</button>` : ""}
         <button type="button" class="btn btn-danger" onclick="confirmDeleteCase('${c.id}')">Delete</button>
       </div>
     </form>
@@ -820,57 +820,59 @@ function escapeHtml(str) {
 // ─── LOR Tab ─────────────────────────────────────────────────
 
 function _buildLorTabHtml(c) {
-  const alreadySent = c.stage === "lor_sent";
-  const lorLog      = c.lorSentLog || [];  // array of {type, method, sentAt}
+  const lorLog = c.lorSentLog || [];
 
   function lorRow(key, label, email, fax, sentEntry) {
-    const sent      = sentEntry ? `<span class="lor-sent-badge">✓ Sent ${new Date(sentEntry.sentAt).toLocaleDateString()} via ${sentEntry.method}</span>` : "";
     const emailOk   = !!email;
     const faxOk     = !!fax;
     const noContact = !emailOk && !faxOk;
+
+    if (sentEntry) {
+      return `
+        <div class="lor-row lor-row-sent">
+          <label class="lor-check-label">
+            <input type="checkbox" checked disabled>
+            <span>${label}</span>
+            <span class="lor-sent-badge">✓ Sent ${new Date(sentEntry.sentAt).toLocaleDateString()} via ${sentEntry.method}</span>
+          </label>
+        </div>`;
+    }
+
     return `
       <div class="lor-row" id="lor-row-${key}">
-        <label class="lor-check-label">
-          <input type="checkbox" id="lor-chk-${key}" onchange="_lorToggleRow('${key}')" ${sentEntry ? "checked disabled" : ""}>
-          <span>${label}</span>
-          ${sent}
-        </label>
-        <div class="lor-delivery" id="lor-delivery-${key}" style="display:${sentEntry ? "none" : "none"}">
-          ${noContact ? `<div class="lor-warn">⚠ No email or fax on file — add them in the Insurance tab first.</div>` : `
-          <div class="lor-method-row">
-            ${emailOk ? `<label class="lor-method-opt"><input type="radio" name="lorMethod-${key}" value="email" checked> Email <span class="lor-contact-val">${escapeHtml(email)}</span></label>` : ""}
-            ${faxOk   ? `<label class="lor-method-opt"><input type="radio" name="lorMethod-${key}" value="fax" ${!emailOk?"checked":""}> Fax <span class="lor-contact-val">${escapeHtml(fax)}</span></label>` : ""}
-          </div>`}
+        <div class="lor-row-top">
+          <label class="lor-check-label">
+            <input type="checkbox" id="lor-chk-${key}">
+            <span>${label}</span>
+          </label>
+          <div class="lor-method-inline">
+            ${noContact
+              ? `<span class="lor-warn-inline">⚠ No email or fax on file</span>`
+              : `${emailOk ? `<label class="lor-method-opt"><input type="radio" name="lorMethod-${key}" value="email" checked> Email <span class="lor-contact-val">${escapeHtml(email)}</span></label>` : ""}
+                 ${faxOk   ? `<label class="lor-method-opt"><input type="radio" name="lorMethod-${key}" value="fax" ${!emailOk ? "checked" : ""}> Fax <span class="lor-contact-val">${escapeHtml(fax)}</span></label>` : ""}`
+            }
+          </div>
         </div>
+        ${noContact ? `<div class="lor-warn" style="margin-top:6px">Go to the Insurance tab and add an email or fax number for this party.</div>` : ""}
       </div>`;
   }
 
-  const log1p  = lorLog.find(l => l.type === "1st_party");
-  const log3p  = lorLog.find(l => l.type === "3rd_party");
-  const logHi  = lorLog.find(l => l.type === "health_ins");
+  const log3p = lorLog.find(l => l.type === "3rd_party");
+  const log1p = lorLog.find(l => l.type === "1st_party");
+  const logHi = lorLog.find(l => l.type === "health_ins");
 
   return `
-    <div style="margin-bottom:12px">
-      <div style="font-weight:700;font-size:14px;color:var(--text-primary);margin-bottom:4px">Letter of Representation</div>
-      <div style="font-size:12px;color:var(--text-muted)">Select which parties to send an LOR to, choose delivery method, then click Send.</div>
+    <div style="margin-bottom:14px">
+      <div style="font-weight:700;font-size:14px;color:var(--text-primary);margin-bottom:3px">Letters of Representation</div>
+      <div style="font-size:12px;color:var(--text-muted)">Check the parties to include, confirm email or fax, then click <strong>Send LORs</strong> below.</div>
     </div>
     <div class="lor-list">
-      ${lorRow("3rd_party","3rd Party (At-Fault Insurance)", c.adjusterEmail, c.adjusterFax, log3p)}
-      ${lorRow("1st_party","1st Party (Client's Insurance)",  c.clientAdjusterEmail, c.clientAdjusterFax, log1p)}
+      ${lorRow("3rd_party", "3rd Party (At-Fault Insurance)", c.adjusterEmail,       c.adjusterFax,       log3p)}
+      ${lorRow("1st_party", "1st Party (Client's Insurance)", c.clientAdjusterEmail, c.clientAdjusterFax, log1p)}
       ${lorRow("health_ins","Medical / Health Insurance",     c.healthInsuranceEmail, c.healthInsuranceFax, logHi)}
     </div>
-    ${alreadySent ? "" : `
-    <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
-      <button type="button" class="btn btn-primary" style="background:var(--slg-orange);border-color:var(--slg-orange)" onclick="sendLORs('${c.id}')">📨 Send Selected LORs</button>
-      <span id="lor-sending-msg" style="font-size:12px;color:var(--text-muted)"></span>
-    </div>`}
+    <span id="lor-sending-msg" style="font-size:12px;color:var(--text-muted);display:block;margin-top:10px"></span>
   `;
-}
-
-function _lorToggleRow(key) {
-  const chk      = document.getElementById(`lor-chk-${key}`);
-  const delivery = document.getElementById(`lor-delivery-${key}`);
-  if (delivery) delivery.style.display = chk.checked ? "block" : "none";
 }
 
 async function sendLORs(caseId) {
