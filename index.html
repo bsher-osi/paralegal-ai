@@ -41,6 +41,17 @@
       </p>
     </div>
 
+    <!-- ─── SOL Alert Banner (full-width, above sidebar) ─── -->
+    <div id="sol-banner" style="display:none">
+      <div class="sol-banner-inner">
+        <span class="sol-banner-label">&#9888; SOL</span>
+        <div class="sol-ticker-wrap">
+          <div id="sol-ticker-track" class="sol-ticker-track"></div>
+        </div>
+        <button id="sol-brief-btn" class="sol-brief-btn" onclick="sendSolDailyBrief()" title="Email daily SOL brief to info@sherlawgroup.com">Send Brief</button>
+      </div>
+    </div>
+
     <!-- ─── Main App (shown after auth) ─────────────────── -->
     <div id="app-main" class="app-body" style="display:none">
       <!-- Sidebar -->
@@ -57,7 +68,7 @@
             <span class="nav-icon">&#9993;</span><span>Email</span>
           </a></li>
           <li><a onclick="switchPanel('calendar')" data-panel="calendar">
-            <span class="nav-icon">&#128197;</span><span>Calendar</span>
+            <span class="nav-icon">&#128197;</span><span>SOL Calendar</span>
           </a></li>
           <li><a onclick="switchPanel('demand')" data-panel="demand">
             <span class="nav-icon">&#9997;</span><span>Demand Letter</span>
@@ -103,16 +114,6 @@
 
       <!-- Content Panels -->
       <main class="main-content">
-        <!-- ─── SOL Alert Banner ───────────────────────────── -->
-        <div id="sol-banner" style="display:none">
-          <div class="sol-banner-inner">
-            <span class="sol-banner-label">&#9888; SOL</span>
-            <div class="sol-ticker-wrap">
-              <div id="sol-ticker-track" class="sol-ticker-track"></div>
-            </div>
-            <button id="sol-brief-btn" class="sol-brief-btn" onclick="sendSolDailyBrief()" title="Email daily SOL brief to info@sherlawgroup.com">Send Brief</button>
-          </div>
-        </div>
         <!-- CRM / Kanban Panel -->
         <div id="panel-crm" class="panel active">
           <div class="panel-header">

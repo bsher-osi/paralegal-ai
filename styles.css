@@ -827,27 +827,47 @@ h1, h2, h3, h4, .logo span, .modal-tab, .btn {
 
 .deadline-days { margin-left: auto; }
 
-/* Calendar filter buttons */
-.cal-filter-btn {
-  background: var(--bg-input);
+/* ─── SOL Calendar Groups ──────────────────────────────────── */
+.sol-group {
+  margin-bottom: 6px;
+  border-radius: var(--radius);
+  overflow: hidden;
   border: 1px solid var(--border);
-  color: var(--text-secondary);
-  border-radius: 999px;
-  padding: 3px 12px;
-  font-size: 12px;
+}
+.sol-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-card);
   cursor: pointer;
-  transition: all 0.15s;
+  user-select: none;
+  transition: background 0.15s;
 }
-.cal-filter-btn:hover {
-  border-color: var(--slg-teal);
-  color: var(--slg-teal);
+.sol-group-header:hover { background: var(--bg-input); }
+.sol-group-chevron {
+  font-size: 13px;
+  color: var(--text-muted);
+  width: 14px;
+  flex-shrink: 0;
 }
-.cal-filter-btn.cal-filter-active {
-  background: var(--slg-teal);
-  border-color: var(--slg-teal);
-  color: #fff;
+.sol-group-label {
   font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  flex: 1;
 }
+.sol-group-count {
+  background: var(--slg-teal);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.sol-group-body { background: var(--bg-secondary); }
+.sol-group-body .deadline-item { border-bottom: 1px solid var(--border); }
+.sol-group-body .deadline-item:last-child { border-bottom: none; }
 
 .deadline-notes {
   font-size: 12px;
@@ -1140,10 +1160,9 @@ h1, h2, h3, h4, .logo span, .modal-tab, .btn {
 /* ─── SOL Alert Banner ─────────────────────────────────────── */
 
 #sol-banner {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  margin: -24px -24px 20px -24px;
+  width: 100%;
+  z-index: 40;
+  flex-shrink: 0;
 }
 
 .sol-banner-inner {

@@ -1,12 +1,22 @@
-// ─── Deadline Calendar Panel ──────────────────────────────────────
-// Displays case deadlines from the backend API, with sync from CRM
-// and manual deadline creation.
+// ─── SOL Calendar Panel ───────────────────────────────────────────
+// Grouped deadline view: 7d / 15d / 30d / 90d / 180d / Beyond
+// Groups 7d, 15d, 30d are open by default; others collapsed.
 
 const CALENDAR_API_BASE = "https://tools.sherlawgroup.com";
 
 let _deadlinesCache = [];
-let _calendarFilter = 180; // active day-range filter (null = show all)
-let _calendarSort   = "asc"; // "asc" | "desc"
+
+// Which groups are open: key = group id, value = bool
+const _groupOpen = { g7: true, g15: true, g30: true, g90: false, g180: false, gbeyond: false };
+
+const GROUPS = [
+  { id: "g7",      label: "Within 7 Days",   min: 0,   max: 7   },
+  { id: "g15",     label: "8 – 15 Days",      min: 8,   max: 15  },
+  { id: "g30",     label: "16 – 30 Days",     min: 16,  max: 30  },
+  { id: "g90",     label: "31 – 90 Days",     min: 31,  max: 90  },
+  { id: "g180",    label: "91 – 180 Days",    min: 91,  max: 180 },
+  { id: "gbeyond", label: "Beyond 180 Days",  min: 181, max: Infinity },
+];
 
 // ─── Rendering ────────────────────────────────────────────────────
 
@@ -15,137 +25,65 @@ function renderCalendarPanel() {
   if (!container) return;
 
   container.innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-primary btn-sm" onclick="syncDeadlinesFromCases()">↻ Sync SOLs</button>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-outline btn-sm" onclick="showAddDeadlineForm()">+ Add Deadline</button>
-      <button class="btn btn-outline btn-sm" onclick="fetchAndRenderDeadlines()">Refresh</button>
+      <button class="btn btn-outline btn-sm" onclick="syncDeadlinesFromCases()" style="margin-left:auto">↻ Sync SOLs</button>
     </div>
-
-    <!-- Filter bar -->
-    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:12px;color:var(--text-muted);margin-right:2px">Filter:</span>
-      ${[7,15,30,90,180].map(d => `
-        <button id="cal-filter-${d}" class="btn btn-sm cal-filter-btn ${_calendarFilter===d?'cal-filter-active':''}"
-          onclick="_setCalFilter(${d})">${d} days</button>
-      `).join("")}
-      <button id="cal-filter-null" class="btn btn-sm cal-filter-btn ${_calendarFilter===null?'cal-filter-active':''}"
-        onclick="_setCalFilter(null)">All</button>
-      <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">Sort:</span>
-      <button class="btn btn-sm btn-outline" onclick="_toggleCalSort()" title="Toggle sort order" id="cal-sort-btn">
-        ${_calendarSort==="asc" ? "↑ Soonest" : "↓ Latest"}
-      </button>
-    </div>
-
     <div id="add-deadline-form-area"></div>
-    <div id="deadlines-list">
-      <p style="color:var(--text-muted)">Loading deadlines...</p>
-    </div>
+    <div id="deadlines-groups"></div>
   `;
 
-  // Auto-sync SOLs from cases every time the calendar is opened
   syncDeadlinesFromCases();
 }
 
-function _setCalFilter(days) {
-  _calendarFilter = days;
-  // Update button styles
-  [7,15,30,90,180].forEach(d => {
-    const btn = document.getElementById(`cal-filter-${d}`);
-    if (btn) btn.classList.toggle("cal-filter-active", days === d);
-  });
-  const allBtn = document.getElementById("cal-filter-null");
-  if (allBtn) allBtn.classList.toggle("cal-filter-active", days === null);
+function _renderGroups() {
+  const container = document.getElementById("deadlines-groups");
+  if (!container) return;
 
-  const list = document.getElementById("deadlines-list");
-  if (list) _renderDeadlinesList(list);
-}
-
-function _toggleCalSort() {
-  _calendarSort = _calendarSort === "asc" ? "desc" : "asc";
-  const btn = document.getElementById("cal-sort-btn");
-  if (btn) btn.textContent = _calendarSort === "asc" ? "↑ Soonest" : "↓ Latest";
-  const list = document.getElementById("deadlines-list");
-  if (list) _renderDeadlinesList(list);
-}
-
-async function fetchAndRenderDeadlines() {
-  const list = document.getElementById("deadlines-list");
-  if (!list) return;
-
-  const token = typeof getIdToken === "function" ? await getIdToken() : null;
-  try {
-    const resp = await fetch(`${CALENDAR_API_BASE}/api/deadlines`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    _deadlinesCache = await resp.json();
-    _renderDeadlinesList(list);
-  } catch (err) {
-    list.innerHTML = `<div class="agent-error">Could not load deadlines: ${escapeHtml(err.message)}</div>`;
-  }
-}
-
-function _renderDeadlinesList(container) {
   if (!_deadlinesCache.length) {
-    container.innerHTML = `<p style="color:var(--text-muted)">No deadlines yet. Click "Sync SOLs" to auto-generate from cases, or add one manually.</p>`;
+    container.innerHTML = `<p style="color:var(--text-muted)">No deadlines yet. Add a case with a SOL date and click Sync.</p>`;
     return;
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
 
-  // Annotate with diffDays
-  let items = _deadlinesCache.map(dl => {
-    const dlDate  = new Date(dl.date + "T00:00:00");
+  // Annotate
+  const items = _deadlinesCache.map(dl => {
+    const dlDate   = new Date(dl.date + "T00:00:00");
     const diffDays = Math.ceil((dlDate - today) / (1000 * 60 * 60 * 24));
     return { ...dl, dlDate, diffDays };
   });
 
-  // Apply filter
-  if (_calendarFilter !== null) {
-    items = items.filter(dl => dl.diffDays >= 0 && dl.diffDays <= _calendarFilter);
-  }
+  const html = GROUPS.map(g => {
+    const members = items
+      .filter(dl => dl.diffDays >= g.min && dl.diffDays <= g.max)
+      .sort((a, b) => a.diffDays - b.diffDays);
 
-  if (!items.length) {
-    container.innerHTML = `<p style="color:var(--text-muted)">No deadlines within the selected range.</p>`;
-    return;
-  }
+    const isOpen  = _groupOpen[g.id];
+    const chevron = isOpen ? "▾" : "▸";
+    const countBadge = members.length
+      ? `<span class="sol-group-count">${members.length}</span>`
+      : `<span class="sol-group-count" style="background:var(--bg-input);color:var(--text-muted)">0</span>`;
 
-  // Apply sort
-  items.sort((a, b) => _calendarSort === "asc"
-    ? a.diffDays - b.diffDays
-    : b.diffDays - a.diffDays);
+    // Urgency accent for the group header
+    const maxUrgency = members.length ? members[0].diffDays : 999;
+    let accentColor = "var(--slg-teal)";
+    if (maxUrgency <= 7)   accentColor = "#ef4444";
+    else if (maxUrgency <= 15)  accentColor = "#f97316";
+    else if (maxUrgency <= 30)  accentColor = "#eab308";
 
-  const html = items.map(dl => {
-    const { dlDate, diffDays } = dl;
-    const isPast = diffDays < 0;
-
-    let urgency = "safe";
-    if (diffDays < 0)   urgency = "past";
-    else if (diffDays <= 15)  urgency = "urgent";
-    else if (diffDays <= 30)  urgency = "warning";
-
-    const badge    = _typeBadge(dl.type);
-    const dateStr  = dlDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
-    const daysLabel = isPast
-      ? `<span style="color:var(--danger);font-weight:600">${Math.abs(diffDays)} days ago</span>`
-      : diffDays === 0
-        ? `<span style="color:var(--danger);font-weight:600">TODAY</span>`
-        : `<span>${diffDays} days</span>`;
+    const rows = members.map(dl => _deadlineRow(dl)).join("");
 
     return `
-      <div class="deadline-item deadline-${urgency}">
-        <div class="deadline-date">${dateStr}</div>
-        <div class="deadline-body">
-          <div class="deadline-title">${escapeHtml(dl.title)}</div>
-          <div class="deadline-meta">
-            ${badge}
-            ${dl.client_name ? `<span>${escapeHtml(dl.client_name)}</span>` : ""}
-            <span class="deadline-days">${daysLabel}</span>
-          </div>
-          ${dl.notes ? `<div class="deadline-notes">${escapeHtml(dl.notes)}</div>` : ""}
+      <div class="sol-group" id="group-${g.id}">
+        <div class="sol-group-header" onclick="_toggleGroup('${g.id}')" style="border-left:3px solid ${accentColor}">
+          <span class="sol-group-chevron">${chevron}</span>
+          <span class="sol-group-label">${g.label}</span>
+          ${countBadge}
         </div>
-        <button class="btn btn-sm" onclick="deleteDeadline('${dl.id}')" style="padding:2px 8px;font-size:11px;color:var(--text-muted)" title="Delete">✕</button>
+        <div class="sol-group-body" id="gbody-${g.id}" style="display:${isOpen ? 'block' : 'none'}">
+          ${members.length ? rows : `<p style="color:var(--text-muted);font-size:13px;padding:10px 16px">No deadlines in this range.</p>`}
+        </div>
       </div>
     `;
   }).join("");
@@ -153,44 +91,85 @@ function _renderDeadlinesList(container) {
   container.innerHTML = html;
 }
 
+function _toggleGroup(id) {
+  _groupOpen[id] = !_groupOpen[id];
+  const body    = document.getElementById(`gbody-${id}`);
+  const header  = document.querySelector(`#group-${id} .sol-group-header`);
+  const chevron = header?.querySelector(".sol-group-chevron");
+  if (body)    body.style.display    = _groupOpen[id] ? "block" : "none";
+  if (chevron) chevron.textContent   = _groupOpen[id] ? "▾" : "▸";
+}
+
+function _deadlineRow(dl) {
+  const { dlDate, diffDays } = dl;
+
+  let urgency = "safe";
+  if (diffDays <= 7)  urgency = "urgent";
+  else if (diffDays <= 30) urgency = "warning";
+
+  const badge    = _typeBadge(dl.type);
+  const dateStr  = dlDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  const daysLabel = diffDays === 0
+    ? `<span style="color:var(--danger);font-weight:700">TODAY</span>`
+    : `<span style="color:var(--text-secondary)">${diffDays} day${diffDays!==1?'s':''}</span>`;
+
+  return `
+    <div class="deadline-item deadline-${urgency}">
+      <div class="deadline-date">${dateStr}</div>
+      <div class="deadline-body">
+        <div class="deadline-title">${escapeHtml(dl.title)}</div>
+        <div class="deadline-meta">
+          ${badge}
+          ${dl.client_name ? `<span>${escapeHtml(dl.client_name)}</span>` : ""}
+          <span class="deadline-days">${daysLabel}</span>
+        </div>
+        ${dl.notes ? `<div class="deadline-notes">${escapeHtml(dl.notes)}</div>` : ""}
+      </div>
+      <button class="btn btn-sm" onclick="deleteDeadline('${dl.id}')" style="padding:2px 8px;font-size:11px;color:var(--text-muted)" title="Delete">✕</button>
+    </div>
+  `;
+}
+
 function _typeBadge(type) {
-  const labels = {
-    sol: "SOL", sol_90: "90-Day", sol_30: "30-Day",
-    demand_response: "Response", custom: "Custom",
-  };
-  const colors = {
-    sol: "#dc2626", sol_90: "#f59e0b", sol_30: "#ef4444",
-    demand_response: "#3b82f6", custom: "#6b7280",
-  };
-  const label = labels[type] || type;
-  const color  = colors[type] || "#6b7280";
-  return `<span class="deadline-badge" style="background:${color}">${label}</span>`;
+  const labels = { sol: "SOL", sol_90: "90-Day", sol_30: "30-Day", demand_response: "Response", custom: "Custom" };
+  const colors  = { sol: "#dc2626", sol_90: "#f59e0b", sol_30: "#ef4444", demand_response: "#3b82f6", custom: "#6b7280" };
+  return `<span class="deadline-badge" style="background:${colors[type]||"#6b7280"}">${labels[type]||type}</span>`;
+}
+
+// ─── Fetch ────────────────────────────────────────────────────────
+
+async function fetchAndRenderDeadlines() {
+  const token = typeof getIdToken === "function" ? await getIdToken() : null;
+  try {
+    const resp = await fetch(`${CALENDAR_API_BASE}/api/deadlines`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    _deadlinesCache = await resp.json();
+    _renderGroups();
+  } catch (err) {
+    const c = document.getElementById("deadlines-groups");
+    if (c) c.innerHTML = `<div class="agent-error">Could not load deadlines: ${escapeHtml(err.message)}</div>`;
+  }
 }
 
 // ─── Sync from CRM Cases ──────────────────────────────────────────
 
 async function syncDeadlinesFromCases() {
   const cases = typeof loadCases === "function" ? loadCases() : [];
-  if (!cases.length) {
-    showToast("No cases in CRM to sync", "error");
-    return;
-  }
+  if (!cases.length) { showToast("No cases to sync", "error"); return; }
 
   const token = typeof getIdToken === "function" ? await getIdToken() : null;
   try {
     const resp = await fetch(`${CALENDAR_API_BASE}/api/deadlines/sync`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(cases),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     _deadlinesCache = await resp.json();
-    const list = document.getElementById("deadlines-list");
-    if (list) _renderDeadlinesList(list);
-    showToast(`Synced ${_deadlinesCache.length} deadlines from ${cases.length} cases`);
+    _renderGroups();
+    showToast(`Synced ${_deadlinesCache.length} deadlines`);
   } catch (err) {
     showToast("Sync failed: " + err.message, "error");
   }
@@ -245,10 +224,7 @@ async function submitAddDeadline() {
   const caseSelect = document.getElementById("dl-case");
   const notes = document.getElementById("dl-notes")?.value?.trim();
 
-  if (!title || !date) {
-    showToast("Title and date are required", "error");
-    return;
-  }
+  if (!title || !date) { showToast("Title and date are required", "error"); return; }
 
   const caseId     = caseSelect?.value || "";
   const clientName = caseSelect?.selectedOptions[0]?.dataset?.name || "";
@@ -257,10 +233,7 @@ async function submitAddDeadline() {
   try {
     const resp = await fetch(`${CALENDAR_API_BASE}/api/deadlines`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ title, date, case_id: caseId, client_name: clientName, notes, type: "custom" }),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
