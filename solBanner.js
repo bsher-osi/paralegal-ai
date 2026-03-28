@@ -24,7 +24,7 @@ function _renderSolBanner() {
       const diff = Math.ceil((sol - today) / (1000 * 60 * 60 * 24));
       return { ...c, diffDays: diff, solDate: sol };
     })
-    .filter(c => c.diffDays >= 0 && c.diffDays <= 30)
+    .filter(c => c.diffDays >= 0)   // show ALL upcoming SOLs, any timeframe
     .sort((a, b) => a.diffDays - b.diffDays);
 
   if (!upcoming.length) {
@@ -35,10 +35,11 @@ function _renderSolBanner() {
   banner.style.display = "block";
 
   function urgencyColor(days) {
-    if (days <= 15) return "#ef4444";
-    if (days <= 30) return "#f97316";
-    if (days <= 60) return "#eab308";
-    return "#0ea5e9";
+    if (days <= 15)  return "#ef4444";  // red — critical
+    if (days <= 30)  return "#f97316";  // orange — urgent
+    if (days <= 90)  return "#eab308";  // yellow — warning
+    if (days <= 180) return "#0ea5e9";  // blue — watch
+    return "#007a85";                    // teal — on radar
   }
 
   const items = upcoming.map(c => {
