@@ -268,10 +268,60 @@ h1, h2, h3, h4, .logo span, .modal-tab, .btn {
 
 #kanban-board {
   display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 160px);
+}
+
+/* Board tab bar: Pre-Lit / Litigation */
+.board-tab-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0;
+}
+.board-tab-btn {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Poppins', sans-serif;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px 6px 0 0;
+}
+.board-tab-btn:hover { color: var(--text-primary); background: var(--bg-input); }
+.board-tab-btn.active {
+  color: var(--slg-orange);
+  border-bottom-color: var(--slg-orange);
+  background: transparent;
+}
+.board-tab-count {
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.board-tab-btn.active .board-tab-count {
+  background: rgba(255,125,33,0.15);
+  color: var(--slg-orange);
+}
+
+/* Scrollable columns row */
+.kanban-scroll {
+  display: flex;
   gap: 16px;
   overflow-x: auto;
   padding-bottom: 16px;
-  min-height: calc(100vh - 160px);
+  flex: 1;
 }
 
 .kanban-column {
@@ -359,6 +409,12 @@ h1, h2, h3, h4, .logo span, .modal-tab, .btn {
 .kanban-card-date {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.kanban-card-sol {
+  font-size: 11px;
+  color: var(--slg-teal);
+  margin-top: 4px;
 }
 
 .kanban-card-value {

@@ -4,23 +4,26 @@
 const CRM_STORAGE_KEY = "paralegal_crm_cases";
 
 const CASE_STAGES = [
-  { id: "intake", label: "New Intake", color: "#6366f1" },
-  { id: "fee_agreement_sent", label: "Fee Agreement Sent", color: "#a855f7" },
-  { id: "fee_agreement_signed", label: "Agreement Signed", color: "#7c3aed" },
-  { id: "open_claims", label: "Open Claims", color: "#6d28d9" },
-  { id: "lor_sent", label: "LOR Sent", color: "#8b5cf6" },
-  { id: "records_collection", label: "Collecting Records", color: "#3b82f6" },
-  { id: "treatment", label: "Client Treating", color: "#0ea5e9" },
-  { id: "demand_prep", label: "Demand Prep", color: "#f59e0b" },
-  { id: "demand_sent", label: "Demand Sent", color: "#f97316" },
-  { id: "negotiation", label: "Negotiation", color: "#8b5cf6" },
-  { id: "litigation_filed", label: "Filed", color: "#ef4444" },
-  { id: "litigation_served", label: "Served", color: "#dc2626" },
-  { id: "litigation_answered", label: "Answer Filed", color: "#b91c1c" },
-  { id: "discovery", label: "Discovery", color: "#991b1b" },
-  { id: "resolution", label: "Resolution", color: "#7c3aed" },
-  { id: "settled", label: "Settled", color: "#22c55e" },
-  { id: "disbursed", label: "Disbursed", color: "#64748b" },
+  // ── Pre-Lit ─────────────────────────────────────────────────
+  { id: "intake",            label: "New Intake",                           color: "#6366f1", tab: "prelit" },
+  { id: "fee_agreement_sent",label: "Fee Agreement Sent",                   color: "#a855f7", tab: "prelit" },
+  { id: "fee_agreement_signed",label:"Agreement Signed",                    color: "#7c3aed", tab: "prelit" },
+  { id: "open_claims",       label: "Open Claim / Get Police Report",       color: "#6d28d9", tab: "prelit" },
+  { id: "client_treating",   label: "Client Treating",                      color: "#0ea5e9", tab: "prelit" },
+  { id: "lien_search",       label: "Lien Search",                          color: "#14b8a6", tab: "prelit" },
+  { id: "collecting_records",label: "Collecting Records",                   color: "#3b82f6", tab: "prelit" },
+  { id: "demand_prep",       label: "Demand Prep",                          color: "#f59e0b", tab: "prelit" },
+  { id: "settlement_dist",   label: "Settlement Distribution Sheet",        color: "#f97316", tab: "prelit" },
+  { id: "negotiations",      label: "Negotiations",                         color: "#8b5cf6", tab: "prelit" },
+  { id: "send_acceptance",   label: "Send Acceptance",                      color: "#22c55e", tab: "prelit" },
+  { id: "lien_search_post",  label: "Lien Search (Post-Settlement)",        color: "#14b8a6", tab: "prelit" },
+  { id: "disperse_funds",    label: "Disperse Funds & Letters to Providers",color: "#64748b", tab: "prelit" },
+  // ── Litigation ───────────────────────────────────────────────
+  { id: "litigation_filed",    label: "Filed",        color: "#ef4444", tab: "litigation" },
+  { id: "litigation_served",   label: "Served",       color: "#dc2626", tab: "litigation" },
+  { id: "litigation_answered", label: "Answer Filed", color: "#b91c1c", tab: "litigation" },
+  { id: "discovery",           label: "Discovery",    color: "#991b1b", tab: "litigation" },
+  { id: "resolution",          label: "Resolution",   color: "#7c3aed", tab: "litigation" },
 ];
 
 const CASE_TYPES = [
@@ -218,11 +221,18 @@ function getSeedData() {
 
 // ─── Kanban Board Rendering ──────────────────────────────────
 
+let _activeBoardTab = "prelit";
+
+function switchBoardTab(tab) {
+  _activeBoardTab = tab;
+  renderKanbanBoard();
+}
+
 function renderKanbanBoard() {
   const board = document.getElementById("kanban-board");
   if (!board) return;
 
-  // Update the header buttons to include import options
+  // Header (only wire once)
   const header = document.querySelector("#panel-crm .panel-header");
   if (header && !header.dataset.importWired) {
     header.dataset.importWired = "1";
@@ -236,32 +246,42 @@ function renderKanbanBoard() {
     `;
   }
 
-  const grouped = getCasesByStage();
+  const grouped   = getCasesByStage();
+  const tabStages = CASE_STAGES.filter(s => s.tab === _activeBoardTab);
+  const allCases  = loadCases();
 
-  board.innerHTML = CASE_STAGES.map(
-    (stage) => `
-    <div class="kanban-column" data-stage="${stage.id}">
-      <div class="kanban-column-header" style="border-top: 3px solid ${stage.color}">
-        <span class="kanban-column-title">${stage.label}</span>
-        <span class="kanban-column-count">${(grouped[stage.id] || []).length}</span>
-      </div>
-      <div class="kanban-cards" data-stage="${stage.id}"
-           ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
-        ${(grouped[stage.id] || [])
-          .map(
-            (c) => `
-          <div class="kanban-card" draggable="true" data-case-id="${c.id}"
-               ondragstart="handleDragStart(event)" onclick="openCaseDetail('${c.id}')">
-            <div class="kanban-card-type">${c.caseType}</div>
-            <div class="kanban-card-name">${c.clientName}</div>
-          </div>
-        `
-          )
-          .join("")}
-      </div>
+  // Count per tab for badges
+  const prelitCount    = allCases.filter(c => (CASE_STAGES.find(s=>s.id===c.stage)||{tab:"prelit"}).tab === "prelit").length;
+  const litigationCount= allCases.filter(c => (CASE_STAGES.find(s=>s.id===c.stage)||{}).tab === "litigation").length;
+
+  board.innerHTML = `
+    <div class="board-tab-bar">
+      <button class="board-tab-btn ${_activeBoardTab==="prelit"?"active":""}" onclick="switchBoardTab('prelit')">
+        Pre-Lit <span class="board-tab-count">${prelitCount}</span>
+      </button>
+      <button class="board-tab-btn ${_activeBoardTab==="litigation"?"active":""}" onclick="switchBoardTab('litigation')">
+        Litigation <span class="board-tab-count">${litigationCount}</span>
+      </button>
     </div>
-  `
-  ).join("");
+    <div class="kanban-scroll">
+      ${tabStages.map(stage => `
+        <div class="kanban-column" data-stage="${stage.id}">
+          <div class="kanban-column-header" style="border-top:3px solid ${stage.color}">
+            <span class="kanban-column-title">${stage.label}</span>
+            <span class="kanban-column-count">${(grouped[stage.id]||[]).length}</span>
+          </div>
+          <div class="kanban-cards" data-stage="${stage.id}"
+               ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+            ${(grouped[stage.id]||[]).map(c => `
+              <div class="kanban-card" draggable="true" data-case-id="${c.id}"
+                   ondragstart="handleDragStart(event)" onclick="openCaseDetail('${c.id}')">
+                <div class="kanban-card-type">${escapeHtml(c.caseType||"")}</div>
+                <div class="kanban-card-name">${escapeHtml(c.clientName||"")}</div>
+                ${c.statuteOfLimitations ? `<div class="kanban-card-sol">SOL ${new Date(c.statuteOfLimitations+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div>` : ""}
+              </div>`).join("")}
+          </div>
+        </div>`).join("")}
+    </div>`;
 }
 
 // ─── Drag & Drop ─────────────────────────────────────────────
@@ -309,7 +329,7 @@ function openCaseDetail(caseId) {
       <button class="modal-tab" onclick="_switchTab(this,'tab-welcome')">Welcome Call</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-phone')">Phone Notes</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-notes')">Notes</button>
-      ${c.stage === "open_claims" || c.stage === "lor_sent" ? `<button class="modal-tab lor-tab" onclick="_switchTab(this,'tab-lor')" style="border-bottom:2px solid var(--slg-orange);color:var(--slg-orange)">📨 LOR</button>` : ""}
+      ${c.stage === "open_claims" ? `<button class="modal-tab lor-tab" onclick="_switchTab(this,'tab-lor')" style="border-bottom:2px solid var(--slg-orange);color:var(--slg-orange)">📨 LOR</button>` : ""}
     </div>
     <form id="case-edit-form" onsubmit="saveCaseEdit(event, '${c.id}')">
       <div id="tab-client" class="tab-pane active">
@@ -360,7 +380,7 @@ function openCaseDetail(caseId) {
         </div>
         <datalist id="az-insurers-modal">${(typeof AZ_INSURERS_LIST !== 'undefined' ? AZ_INSURERS_LIST : []).map(n => `<option value="${n}">`).join('')}</datalist>
       </div>
-      ${c.stage === "open_claims" || c.stage === "lor_sent" ? `
+      ${c.stage === "open_claims" ? `
       <div id="tab-lor" class="tab-pane">
         ${_buildLorTabHtml(c)}
       </div>` : ""}
@@ -387,8 +407,12 @@ function openCaseDetail(caseId) {
         ${c.stage === "intake" ? `<button type="button" class="btn btn-accent" style="background:#a855f7" onclick="showFeeAgreementPreview('${c.id}')">Send Fee Agreement</button>` : ""}
         ${c.stage === "fee_agreement_sent" ? `<button type="button" class="btn btn-accent" style="background:#22c55e" onclick="markAgreementSigned('${c.id}')">Agreement Signed</button>` : ""}
         ${c.stage === "fee_agreement_sent" && c.docusignEnvelopeId ? `<button type="button" class="btn btn-outline" onclick="checkAgreementStatus('${c.id}')">Check Signature</button>` : ""}
-        ${c.stage === "fee_agreement_signed" ? `<button type="button" class="btn btn-accent" style="background:#6d28d9" onclick="moveCaseToStage('${c.id}','open_claims');renderKanbanBoard();closeCaseModal();showToast('Moved to Open Claims')">Open Claim</button>` : ""}
+        ${c.stage === "fee_agreement_signed" ? `<button type="button" class="btn btn-accent" style="background:#6d28d9" onclick="moveCaseToStage('${c.id}','open_claims');renderKanbanBoard();closeCaseModal();showToast('Moved to Open Claim')">Open Claim</button>` : ""}
         ${c.stage === "open_claims" ? `<button type="button" class="btn btn-accent" style="background:var(--slg-orange)" onclick="sendLORs('${c.id}')">📨 Send LORs</button>` : ""}
+        ${c.stage === "negotiations" ? `
+          <button type="button" class="btn btn-accent" style="background:#22c55e" onclick="moveCaseToStage('${c.id}','send_acceptance');renderKanbanBoard();closeCaseModal();showToast('Case Settled — moved to Send Acceptance')">✅ Case Settled</button>
+          <button type="button" class="btn btn-accent" style="background:#ef4444" onclick="moveCaseToStage('${c.id}','litigation_filed');_activeBoardTab='litigation';renderKanbanBoard();closeCaseModal();showToast('Moved to Litigation')">⚖️ Move to Litigation</button>
+        ` : ""}
         <button type="button" class="btn btn-danger" onclick="confirmDeleteCase('${c.id}')">Delete</button>
       </div>
     </form>
@@ -918,10 +942,10 @@ async function sendLORs(caseId) {
     // Log sent entries
     const sentAt  = new Date().toISOString();
     const lorLog  = [...(c.lorSentLog || []), ...toSend.map(t => ({ ...t, sentAt }))];
-    updateCase(caseId, { lorSentLog: lorLog, stage: "lor_sent" });
+    updateCase(caseId, { lorSentLog: lorLog, stage: "client_treating" });
     renderKanbanBoard();
     closeCaseModal();
-    showToast(`LOR${toSend.length > 1 ? "s" : ""} sent — case moved to LOR Sent`);
+    showToast(`LOR${toSend.length > 1 ? "s" : ""} sent — case moved to Client Treating`);
   } catch (err) {
     if (msg) msg.textContent = "";
     showToast("Send failed: " + err.message, "error");
