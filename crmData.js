@@ -3,30 +3,38 @@
 
 const CRM_STORAGE_KEY = "paralegal_crm_cases";
 
+// Color key:
+//   Indigo/Violet  = onboarding / intake workflow
+//   Blue/Cyan/Teal = active case management & medical
+//   Amber/Orange   = demand & negotiation preparation
+//   Red            = high-stakes (active negotiations, litigation)
+//   Green          = positive milestone (signed, settled, accepted)
+//   Slate          = wrapping up / administrative close-out
+//   Dark slate     = case closed
 const CASE_STAGES = [
   // ── Pre-Lit Row 1 ────────────────────────────────────────────
-  { id: "intake",              label: "New Intake",                           color: "#6366f1", tab: "prelit",    row: 1 },
-  { id: "fee_agreement_sent",  label: "Fee Agreement Sent",                   color: "#a855f7", tab: "prelit",    row: 1 },
-  { id: "fee_agreement_signed",label: "Agreement Signed",                     color: "#7c3aed", tab: "prelit",    row: 1 },
-  { id: "open_claims",         label: "Open Claim / Get Police Report",       color: "#6d28d9", tab: "prelit",    row: 1 },
-  { id: "client_treating",     label: "Client Treating",                      color: "#0ea5e9", tab: "prelit",    row: 1 },
-  { id: "lien_search",         label: "Lien Search",                          color: "#14b8a6", tab: "prelit",    row: 1 },
-  { id: "collecting_records",  label: "Collecting Records",                   color: "#3b82f6", tab: "prelit",    row: 1 },
+  { id: "intake",              label: "New Intake",                           color: "#6366f1", tab: "prelit",    row: 1 }, // indigo  – new case
+  { id: "fee_agreement_sent",  label: "Fee Agreement Sent",                   color: "#8b5cf6", tab: "prelit",    row: 1 }, // violet  – pending signature
+  { id: "fee_agreement_signed",label: "Agreement Signed",                     color: "#22c55e", tab: "prelit",    row: 1 }, // green   – signed ✓
+  { id: "open_claims",         label: "Open Claim / Get Police Report",       color: "#0ea5e9", tab: "prelit",    row: 1 }, // sky     – active claim
+  { id: "client_treating",     label: "Client Treating",                      color: "#06b6d4", tab: "prelit",    row: 1 }, // cyan    – medical treatment
+  { id: "lien_search",         label: "Lien Search",                          color: "#14b8a6", tab: "prelit",    row: 1 }, // teal    – research
+  { id: "collecting_records",  label: "Collecting Records",                   color: "#3b82f6", tab: "prelit",    row: 1 }, // blue    – gathering docs
   // ── Pre-Lit Row 2 ────────────────────────────────────────────
-  { id: "demand_prep",         label: "Demand Prep",                          color: "#f59e0b", tab: "prelit",    row: 2 },
-  { id: "settlement_dist",     label: "Settlement Distribution Sheet",        color: "#f97316", tab: "prelit",    row: 2 },
-  { id: "negotiations",        label: "Negotiations",                         color: "#8b5cf6", tab: "prelit",    row: 2 },
-  { id: "send_acceptance",     label: "Send Acceptance",                      color: "#22c55e", tab: "prelit",    row: 2 },
-  { id: "lien_search_post",    label: "Lien Search (Post-Settlement)",        color: "#14b8a6", tab: "prelit",    row: 2 },
-  { id: "disperse_funds",      label: "Disperse Funds & Letters to Providers",color: "#64748b", tab: "prelit",    row: 2 },
-  { id: "case_closed",         label: "Case Closed",                          color: "#334155", tab: "both",      row: 2 },
+  { id: "demand_prep",         label: "Demand Prep",                          color: "#f59e0b", tab: "prelit",    row: 2 }, // amber   – building demand
+  { id: "settlement_dist",     label: "Settlement Distribution Sheet",        color: "#f97316", tab: "prelit",    row: 2 }, // orange  – calculating funds
+  { id: "negotiations",        label: "Negotiations",                         color: "#ef4444", tab: "prelit",    row: 2 }, // red     – active negotiation
+  { id: "send_acceptance",     label: "Send Acceptance",                      color: "#22c55e", tab: "prelit",    row: 2 }, // green   – settled ✓
+  { id: "lien_search_post",    label: "Lien Search (Post-Settlement)",        color: "#14b8a6", tab: "prelit",    row: 2 }, // teal    – post-settlement check
+  { id: "disperse_funds",      label: "Disperse Funds & Letters to Providers",color: "#64748b", tab: "prelit",    row: 2 }, // slate   – closing out
+  { id: "case_closed",         label: "Case Closed",                          color: "#334155", tab: "both",      row: 2 }, // dark    – done
   // ── Litigation Row 1 ─────────────────────────────────────────
-  { id: "litigation_filed",    label: "Filed",                                color: "#ef4444", tab: "litigation", row: 1 },
-  { id: "litigation_served",   label: "Served",                               color: "#dc2626", tab: "litigation", row: 1 },
-  { id: "litigation_answered", label: "Answer Filed",                         color: "#b91c1c", tab: "litigation", row: 1 },
+  { id: "litigation_filed",    label: "Filed",                                color: "#dc2626", tab: "litigation", row: 1 }, // red     – filed
+  { id: "litigation_served",   label: "Served",                               color: "#b91c1c", tab: "litigation", row: 1 }, // red+    – served
+  { id: "litigation_answered", label: "Answer Filed",                         color: "#991b1b", tab: "litigation", row: 1 }, // dark red – answered
   // ── Litigation Row 2 ─────────────────────────────────────────
-  { id: "discovery",           label: "Discovery",                            color: "#991b1b", tab: "litigation", row: 2 },
-  { id: "resolution",          label: "Resolution",                           color: "#7c3aed", tab: "litigation", row: 2 },
+  { id: "discovery",           label: "Discovery",                            color: "#7c3aed", tab: "litigation", row: 2 }, // violet  – complex process
+  { id: "resolution",          label: "Resolution",                           color: "#22c55e", tab: "litigation", row: 2 }, // green   – resolved ✓
 ];
 
 const CASE_TYPES = [
@@ -351,7 +359,7 @@ function openCaseDetail(caseId) {
       <button class="modal-tab" onclick="_switchTab(this,'tab-welcome')">Welcome Call</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-phone')">Phone Notes</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-notes')">Notes</button>
-      ${c.stage === "open_claims" ? `<button class="modal-tab lor-tab" onclick="_switchTab(this,'tab-lor')" style="border-bottom:2px solid var(--slg-orange);color:var(--slg-orange)">📨 LOR</button>` : ""}
+      ${c.stage === "open_claims" ? `<button class="modal-tab lor-tab" onclick="_switchTab(this,'tab-lor')">📨 LOR</button>` : ""}
     </div>
     <form id="case-edit-form" onsubmit="saveCaseEdit(event, '${c.id}')">
       <div id="tab-client" class="tab-pane active">
@@ -452,9 +460,16 @@ function saveCaseEdit(event, caseId) {
   const form = event.target;
   const data = Object.fromEntries(new FormData(form));
   updateCase(caseId, data);
-  closeCaseModal();
   renderKanbanBoard();
   showToast("Case updated successfully");
+  // Re-render modal in place so Insurance changes immediately show in LOR tab
+  const activeTabId = form.closest(".modal-box")?.querySelector(".tab-pane.active")?.id;
+  openCaseDetail(caseId);
+  if (activeTabId) {
+    const tabPane = document.getElementById(activeTabId);
+    const tabBtn  = document.querySelector(`[onclick*="'${activeTabId}'"]`);
+    if (tabPane && tabBtn) _switchTab(tabBtn, activeTabId);
+  }
 }
 
 function confirmDeleteCase(caseId) {
