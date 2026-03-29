@@ -473,12 +473,19 @@ function saveCaseEdit(event, caseId) {
 }
 
 function confirmDeleteCase(caseId) {
-  if (confirm("Are you sure you want to delete this case? This cannot be undone.")) {
-    deleteCase(caseId);
-    closeCaseModal();
-    renderKanbanBoard();
-    showToast("Case deleted");
+  const cases = loadCases();
+  const c = cases.find(x => x.id === caseId);
+  if (!c) return;
+  const entered = prompt(`To permanently delete this case, type the client name exactly:\n\n"${c.clientName}"`);
+  if (entered === null) return; // cancelled
+  if (entered.trim() !== c.clientName.trim()) {
+    showToast("Name did not match — case not deleted", "error");
+    return;
   }
+  deleteCase(caseId);
+  closeCaseModal();
+  renderKanbanBoard();
+  showToast("Case deleted");
 }
 
 // ─── New Case Form ───────────────────────────────────────────
