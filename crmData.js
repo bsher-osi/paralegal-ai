@@ -4,26 +4,29 @@
 const CRM_STORAGE_KEY = "paralegal_crm_cases";
 
 const CASE_STAGES = [
-  // ── Pre-Lit ─────────────────────────────────────────────────
-  { id: "intake",            label: "New Intake",                           color: "#6366f1", tab: "prelit" },
-  { id: "fee_agreement_sent",label: "Fee Agreement Sent",                   color: "#a855f7", tab: "prelit" },
-  { id: "fee_agreement_signed",label:"Agreement Signed",                    color: "#7c3aed", tab: "prelit" },
-  { id: "open_claims",       label: "Open Claim / Get Police Report",       color: "#6d28d9", tab: "prelit" },
-  { id: "client_treating",   label: "Client Treating",                      color: "#0ea5e9", tab: "prelit" },
-  { id: "lien_search",       label: "Lien Search",                          color: "#14b8a6", tab: "prelit" },
-  { id: "collecting_records",label: "Collecting Records",                   color: "#3b82f6", tab: "prelit" },
-  { id: "demand_prep",       label: "Demand Prep",                          color: "#f59e0b", tab: "prelit" },
-  { id: "settlement_dist",   label: "Settlement Distribution Sheet",        color: "#f97316", tab: "prelit" },
-  { id: "negotiations",      label: "Negotiations",                         color: "#8b5cf6", tab: "prelit" },
-  { id: "send_acceptance",   label: "Send Acceptance",                      color: "#22c55e", tab: "prelit" },
-  { id: "lien_search_post",  label: "Lien Search (Post-Settlement)",        color: "#14b8a6", tab: "prelit" },
-  { id: "disperse_funds",    label: "Disperse Funds & Letters to Providers",color: "#64748b", tab: "prelit" },
-  // ── Litigation ───────────────────────────────────────────────
-  { id: "litigation_filed",    label: "Filed",        color: "#ef4444", tab: "litigation" },
-  { id: "litigation_served",   label: "Served",       color: "#dc2626", tab: "litigation" },
-  { id: "litigation_answered", label: "Answer Filed", color: "#b91c1c", tab: "litigation" },
-  { id: "discovery",           label: "Discovery",    color: "#991b1b", tab: "litigation" },
-  { id: "resolution",          label: "Resolution",   color: "#7c3aed", tab: "litigation" },
+  // ── Pre-Lit Row 1 ────────────────────────────────────────────
+  { id: "intake",              label: "New Intake",                           color: "#6366f1", tab: "prelit",    row: 1 },
+  { id: "fee_agreement_sent",  label: "Fee Agreement Sent",                   color: "#a855f7", tab: "prelit",    row: 1 },
+  { id: "fee_agreement_signed",label: "Agreement Signed",                     color: "#7c3aed", tab: "prelit",    row: 1 },
+  { id: "open_claims",         label: "Open Claim / Get Police Report",       color: "#6d28d9", tab: "prelit",    row: 1 },
+  { id: "client_treating",     label: "Client Treating",                      color: "#0ea5e9", tab: "prelit",    row: 1 },
+  { id: "lien_search",         label: "Lien Search",                          color: "#14b8a6", tab: "prelit",    row: 1 },
+  { id: "collecting_records",  label: "Collecting Records",                   color: "#3b82f6", tab: "prelit",    row: 1 },
+  // ── Pre-Lit Row 2 ────────────────────────────────────────────
+  { id: "demand_prep",         label: "Demand Prep",                          color: "#f59e0b", tab: "prelit",    row: 2 },
+  { id: "settlement_dist",     label: "Settlement Distribution Sheet",        color: "#f97316", tab: "prelit",    row: 2 },
+  { id: "negotiations",        label: "Negotiations",                         color: "#8b5cf6", tab: "prelit",    row: 2 },
+  { id: "send_acceptance",     label: "Send Acceptance",                      color: "#22c55e", tab: "prelit",    row: 2 },
+  { id: "lien_search_post",    label: "Lien Search (Post-Settlement)",        color: "#14b8a6", tab: "prelit",    row: 2 },
+  { id: "disperse_funds",      label: "Disperse Funds & Letters to Providers",color: "#64748b", tab: "prelit",    row: 2 },
+  { id: "case_closed",         label: "Case Closed",                          color: "#334155", tab: "both",      row: 2 },
+  // ── Litigation Row 1 ─────────────────────────────────────────
+  { id: "litigation_filed",    label: "Filed",                                color: "#ef4444", tab: "litigation", row: 1 },
+  { id: "litigation_served",   label: "Served",                               color: "#dc2626", tab: "litigation", row: 1 },
+  { id: "litigation_answered", label: "Answer Filed",                         color: "#b91c1c", tab: "litigation", row: 1 },
+  // ── Litigation Row 2 ─────────────────────────────────────────
+  { id: "discovery",           label: "Discovery",                            color: "#991b1b", tab: "litigation", row: 2 },
+  { id: "resolution",          label: "Resolution",                           color: "#7c3aed", tab: "litigation", row: 2 },
 ];
 
 const CASE_TYPES = [
@@ -247,12 +250,40 @@ function renderKanbanBoard() {
   }
 
   const grouped   = getCasesByStage();
-  const tabStages = CASE_STAGES.filter(s => s.tab === _activeBoardTab);
   const allCases  = loadCases();
 
+  // Stages for current tab (include "both" stages in every tab)
+  const tabStages = CASE_STAGES.filter(s => s.tab === _activeBoardTab || s.tab === "both");
+
+  const row1 = tabStages.filter(s => s.row === 1);
+  const row2 = tabStages.filter(s => s.row === 2);
+
   // Count per tab for badges
-  const prelitCount    = allCases.filter(c => (CASE_STAGES.find(s=>s.id===c.stage)||{tab:"prelit"}).tab === "prelit").length;
-  const litigationCount= allCases.filter(c => (CASE_STAGES.find(s=>s.id===c.stage)||{}).tab === "litigation").length;
+  const prelitIds    = CASE_STAGES.filter(s => s.tab === "prelit" || s.tab === "both").map(s => s.id);
+  const litigIds     = CASE_STAGES.filter(s => s.tab === "litigation" || s.tab === "both").map(s => s.id);
+  const prelitCount  = allCases.filter(c => prelitIds.includes(c.stage)).length;
+  const litigCount   = allCases.filter(c => litigIds.includes(c.stage)).length;
+
+  function renderColumn(stage) {
+    const cards = (grouped[stage.id]||[]);
+    return `
+      <div class="kanban-column" data-stage="${stage.id}">
+        <div class="kanban-column-header" style="border-top:3px solid ${stage.color}">
+          <span class="kanban-column-title">${stage.label}</span>
+          <span class="kanban-column-count">${cards.length}</span>
+        </div>
+        <div class="kanban-cards" data-stage="${stage.id}"
+             ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+          ${cards.map(c => `
+            <div class="kanban-card" draggable="true" data-case-id="${c.id}"
+                 ondragstart="handleDragStart(event)" onclick="openCaseDetail('${c.id}')">
+              <div class="kanban-card-type">${escapeHtml(c.caseType||"")}</div>
+              <div class="kanban-card-name">${escapeHtml(c.clientName||"")}</div>
+              ${c.statuteOfLimitations ? `<div class="kanban-card-sol">SOL ${new Date(c.statuteOfLimitations+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div>` : ""}
+            </div>`).join("")}
+        </div>
+      </div>`;
+  }
 
   board.innerHTML = `
     <div class="board-tab-bar">
@@ -260,27 +291,18 @@ function renderKanbanBoard() {
         Pre-Lit <span class="board-tab-count">${prelitCount}</span>
       </button>
       <button class="board-tab-btn ${_activeBoardTab==="litigation"?"active":""}" onclick="switchBoardTab('litigation')">
-        Litigation <span class="board-tab-count">${litigationCount}</span>
+        Litigation <span class="board-tab-count">${litigCount}</span>
       </button>
     </div>
-    <div class="kanban-scroll">
-      ${tabStages.map(stage => `
-        <div class="kanban-column" data-stage="${stage.id}">
-          <div class="kanban-column-header" style="border-top:3px solid ${stage.color}">
-            <span class="kanban-column-title">${stage.label}</span>
-            <span class="kanban-column-count">${(grouped[stage.id]||[]).length}</span>
-          </div>
-          <div class="kanban-cards" data-stage="${stage.id}"
-               ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
-            ${(grouped[stage.id]||[]).map(c => `
-              <div class="kanban-card" draggable="true" data-case-id="${c.id}"
-                   ondragstart="handleDragStart(event)" onclick="openCaseDetail('${c.id}')">
-                <div class="kanban-card-type">${escapeHtml(c.caseType||"")}</div>
-                <div class="kanban-card-name">${escapeHtml(c.clientName||"")}</div>
-                ${c.statuteOfLimitations ? `<div class="kanban-card-sol">SOL ${new Date(c.statuteOfLimitations+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div>` : ""}
-              </div>`).join("")}
-          </div>
-        </div>`).join("")}
+    <div class="kanban-rows">
+      <div class="kanban-row-wrap">
+        <div class="kanban-row-label">Row 1</div>
+        <div class="kanban-scroll">${row1.map(renderColumn).join("")}</div>
+      </div>
+      <div class="kanban-row-wrap">
+        <div class="kanban-row-label">Row 2</div>
+        <div class="kanban-scroll">${row2.map(renderColumn).join("")}</div>
+      </div>
     </div>`;
 }
 
