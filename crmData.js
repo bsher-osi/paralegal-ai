@@ -763,19 +763,21 @@ async function _showAttorneyShareImport() {
     `;
     _loadAttorneyShareCases();
   } else {
-    statusEl.innerHTML = `<div style="background:var(--bg-card);padding:8px 12px;border-radius:6px;font-size:13px;color:var(--text-muted)">Attorney Share API not connected — set ATTORNEY_SHARE_API_KEY on the server</div>`;
+    statusEl.innerHTML = `<div style="background:var(--bg-card);padding:8px 12px;border-radius:6px;font-size:13px;color:var(--text-muted)">Attorney Share not connected</div>`;
     bodyEl.innerHTML = `
-      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">
-        To connect: add your Attorney Share API key (starts with <code>attshr_</code>) as an environment variable on the server.
-      </p>
+      <div class="settings-section" style="margin-bottom:12px">
+        <h3 style="margin:0 0 8px">Connect Attorney Share</h3>
+        <div class="form-group">
+          <label>API Key <span style="color:var(--text-muted);font-weight:400">(starts with attshr_)</span></label>
+          <input type="password" id="attyshare-api-key" placeholder="attshr_..." autocomplete="off" />
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="_saveAttorneyShareKey()">Save &amp; Connect</button>
+      </div>
 
       <div class="settings-section">
         <h3 style="margin:0 0 8px">Manual Import</h3>
-        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px">
-          Paste referral data as JSON to create a case manually.
-        </p>
         <div class="form-group">
-          <textarea id="attyshare-json" rows="8" placeholder='{"clientName": "John Doe", "caseType": "Auto Accident", "phone": "555-1234", "email": "john@email.com", "dateOfIncident": "2026-03-01", "description": "Rear-end collision..."}'></textarea>
+          <textarea id="attyshare-json" rows="6" placeholder='{"clientName": "John Doe", "caseType": "Auto Accident", "phone": "555-1234", "email": "john@email.com", "dateOfIncident": "2026-03-01", "description": "Rear-end collision..."}'></textarea>
         </div>
         <div class="modal-actions">
           <button class="btn btn-primary" onclick="_importAttorneyShareJson()">Import</button>
@@ -783,6 +785,26 @@ async function _showAttorneyShareImport() {
         </div>
       </div>
     `;
+  }
+}
+
+async function _saveAttorneyShareKey() {
+  const key = document.getElementById("attyshare-api-key")?.value?.trim();
+  if (!key || !key.startsWith("attshr_")) {
+    showToast("Key must start with attshr_", "error");
+    return;
+  }
+  try {
+    const resp = await fetch(`${API_BASE}/api/attorney-share/set-key`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: key }),
+    });
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || `HTTP ${resp.status}`); }
+    showToast("API key saved — reconnecting…");
+    _showAttorneyShareImport(); // re-check connection
+  } catch (err) {
+    showToast("Save failed: " + err.message, "error");
   }
 }
 
