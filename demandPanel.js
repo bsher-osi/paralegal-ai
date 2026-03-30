@@ -2,7 +2,7 @@
 // Renders the full demand letter form and handles submission to the
 // Demands Flask API, job polling, and CRM case pre-fill.
 
-const DEMANDS_API_BASE = "https://tools.sherlawgroup.com";
+const DEMANDS_API_BASE = "";
 
 const FIRM_ATTORNEYS = {
   "Sher Law Group": [

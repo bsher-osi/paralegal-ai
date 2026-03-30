@@ -1,7 +1,7 @@
 // ─── Lien & Specials Tracking Panel ───────────────────────────────
 // Medical bills table with running totals + AI extraction from PDFs
 
-const SPECIALS_API = "https://tools.sherlawgroup.com";
+const SPECIALS_API = "";
 
 function renderLiensPanel() {
   const container = document.getElementById("liens-content");

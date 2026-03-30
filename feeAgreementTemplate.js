@@ -312,7 +312,7 @@ async function checkAgreementStatus(caseId) {
 async function pollDocuSignCompletions() {
   try {
     const token = typeof getIdToken === "function" ? await getIdToken() : null;
-    const resp = await fetch(`${typeof API_BASE !== 'undefined' ? API_BASE : 'https://tools.sherlawgroup.com'}/api/esign/completed`, {
+    const resp = await fetch(`${typeof API_BASE !== 'undefined' ? API_BASE : ''}/api/esign/completed`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!resp.ok) return;

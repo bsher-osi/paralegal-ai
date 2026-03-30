@@ -1,7 +1,7 @@
 // caseAgents.js — Stage automation engine for case management
 // Triggers actions (letter generation, deadlines, record requests) when a case moves stages.
 
-const API_BASE = "https://tools.sherlawgroup.com";
+const API_BASE = "";
 
 // ─── Helpers ─────────────────────────────────────────────────
 

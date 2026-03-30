@@ -1,7 +1,7 @@
 // ─── Medical Record Review Panel ──────────────────────────────────
 // Record tracking per case + AI-powered summarization
 
-const MEDREC_API = "https://tools.sherlawgroup.com";
+const MEDREC_API = "";
 
 function renderMedRecordsPanel() {
   const container = document.getElementById("medrecords-content");

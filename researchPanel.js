@@ -159,7 +159,7 @@ async function _estimateValue() {
   let specialsTotal = 0;
   try {
     const token = typeof getIdToken === "function" ? await getIdToken() : null;
-    const resp = await fetch(`https://tools.sherlawgroup.com/api/specials?caseId=${caseId}`, {
+    const resp = await fetch(`/api/specials?caseId=${caseId}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     });
     if (resp.ok) {

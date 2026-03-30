@@ -2,7 +2,7 @@
 // Grouped deadline view: 7d / 15d / 30d / 90d / 180d / Beyond
 // Groups 7d, 15d, 30d are open by default; others collapsed.
 
-const CALENDAR_API_BASE = "https://tools.sherlawgroup.com";
+const CALENDAR_API_BASE = "";
 
 let _deadlinesCache = [];
 

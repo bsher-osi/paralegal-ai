@@ -1,7 +1,7 @@
 // ─── Client Contact Log Panel ─────────────────────────────────────
 // 30-day contact alert dashboard + per-case contact log CRUD
 
-const CONTACT_API_BASE = "https://tools.sherlawgroup.com";
+const CONTACT_API_BASE = "";
 
 let _contactLogsCache = [];
 let _selectedContactCaseId = "";

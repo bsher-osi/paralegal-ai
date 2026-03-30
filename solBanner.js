@@ -69,12 +69,12 @@ async function sendSolDailyBrief() {
     const token = typeof getIdToken === "function" ? await getIdToken() : null;
     // Sync cases to backend first so it has latest data
     const cases = typeof loadCases === "function" ? loadCases() : [];
-    await fetch("https://tools.sherlawgroup.com/api/cases/sync", {
+    await fetch("/api/cases/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(cases),
     });
-    const resp = await fetch("https://tools.sherlawgroup.com/api/sol/daily-brief", {
+    const resp = await fetch("/api/sol/daily-brief", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     });

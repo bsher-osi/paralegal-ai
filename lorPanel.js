@@ -1,7 +1,7 @@
 // ─── Letter of Representation Panel ──────────────────────────────
 // AI-powered LOR generator using Claude API (client-side)
 
-const LOR_API = "https://tools.sherlawgroup.com";
+const LOR_API = "";
 
 function renderLorPanel() {
   const container = document.getElementById("lor-content");

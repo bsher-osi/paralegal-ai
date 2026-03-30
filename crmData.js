@@ -998,7 +998,7 @@ async function sendLORs(caseId) {
 
   const token = typeof getIdToken === "function" ? await getIdToken() : null;
   try {
-    const resp = await fetch("https://tools.sherlawgroup.com/api/lor/send", {
+    const resp = await fetch("/api/lor/send", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ case_id: caseId, case_data: c, recipients: toSend }),

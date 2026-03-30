@@ -2,7 +2,7 @@
 // Timeline view of litigation events per case, with CRUD against
 // the /api/litigation-events backend.
 
-const LITIGATION_API = "https://tools.sherlawgroup.com";
+const LITIGATION_API = "";
 
 let _litEventsCache = [];
 let _litSelectedCaseId = "";

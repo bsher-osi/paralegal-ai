@@ -1,7 +1,7 @@
 // ─── Settlement Distribution Sheet Panel ─────────────────────────────
 // Calculates attorney fees, medical lien totals, and net-to-client
 
-const SETTLEMENT_API = "https://tools.sherlawgroup.com";
+const SETTLEMENT_API = "";
 
 function _fmtS(n) { return (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 

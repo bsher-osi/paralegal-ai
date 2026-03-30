@@ -1,7 +1,7 @@
 // ─── Record Request Letters Panel ─────────────────────────────────
 // Template generator + request tracking with follow-up alerts
 
-const REQUESTS_API = "https://tools.sherlawgroup.com";
+const REQUESTS_API = "";
 
 const REQUEST_TEMPLATES = {
   "Medical Records": {
