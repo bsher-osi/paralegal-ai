@@ -212,9 +212,17 @@ async function _sendFeeAgreement(caseId) {
   let sentViaAdobe = false;
 
   // Try DocuSign first
-  try {
-    const adobeReady = await _isAdobeSignConfigured();
-    if (adobeReady && c.email) {
+  const adobeReady = await _isAdobeSignConfigured();
+
+  // Require email for DocuSign
+  if (adobeReady && !c.email) {
+    if (btn) { btn.disabled = false; btn.textContent = "Send Fee Agreement"; }
+    showToast("Client email is required to send via DocuSign — add it on the Client tab first", "error");
+    return;
+  }
+
+  if (adobeReady && c.email) {
+    try {
       const result = await agentApiFetch("/api/esign/send", {
         method: "POST",
         body: JSON.stringify({
@@ -238,13 +246,16 @@ async function _sendFeeAgreement(caseId) {
         } catch (_) {}
         sentViaAdobe = true;
       }
+    } catch (err) {
+      console.error("[feeAgreement] DocuSign send error:", err.message);
+      if (btn) { btn.disabled = false; btn.textContent = "Send Fee Agreement"; }
+      showToast("DocuSign error: " + err.message, "error");
+      return;
     }
-  } catch (err) {
-    console.warn("[feeAgreement] DocuSign failed, falling back to local:", err.message);
   }
 
-  // Fallback: save document locally
-  if (!sentViaAdobe) {
+  // Fallback: save document locally (only if DocuSign not configured)
+  if (!sentViaAdobe && !adobeReady) {
     try {
       await agentApiFetch("/api/case-documents", {
         method: "POST",
@@ -268,7 +279,7 @@ async function _sendFeeAgreement(caseId) {
   if (sentViaAdobe) {
     showToast(`Fee agreement sent via DocuSign to ${c.email}`, "success");
   } else {
-    showToast(`Fee agreement saved for ${c.clientName} (send manually or configure DocuSign)`, "success");
+    showToast(`Fee agreement saved for ${c.clientName} — DocuSign not configured`, "info");
   }
 }
 
