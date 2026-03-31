@@ -1,0 +1,20 @@
+name: Deploy frontend to server
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull latest frontend on server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ubuntu
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            cd /home/ubuntu/demandletters/Demands/lena-app
+            git pull origin master
+            echo "Frontend deployed at $(date)"
