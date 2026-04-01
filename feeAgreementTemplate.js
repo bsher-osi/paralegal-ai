@@ -330,11 +330,17 @@ async function pollDocuSignCompletions() {
 
     const cases = loadCases();
     let moved = 0;
+    const alreadyMoved = new Set();
     for (const env of completed) {
-      // Find case by envelope ID stored in localStorage
-      const c = cases.find(x => x.docusignEnvelopeId === env.envelopeId && x.stage === "fee_agreement_sent");
+      // Match by envelope ID in localStorage OR by caseId returned from backend
+      const c = cases.find(x =>
+        x.stage === "fee_agreement_sent" &&
+        !alreadyMoved.has(x.id) &&
+        (x.docusignEnvelopeId === env.envelopeId || (env.caseId && x.id === env.caseId))
+      );
       if (c) {
         moveCaseToStage(c.id, "fee_agreement_signed");
+        alreadyMoved.add(c.id);
         moved++;
       }
     }
