@@ -853,7 +853,11 @@ async function _fetchAttorneyShareCases() {
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     });
     const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    if (!resp.ok) {
+      // Show full debug log so we can identify the correct endpoint
+      const debugStr = data.debug ? "\n" + data.debug.join(", ") : "";
+      throw new Error((data.error || `HTTP ${resp.status}`) + debugStr);
+    }
 
     const referrals = data.referrals || [];
     if (!referrals.length) {
