@@ -359,6 +359,7 @@ function openCaseDetail(caseId) {
       <button class="modal-tab" onclick="_switchTab(this,'tab-welcome')">Welcome Call</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-phone')">Phone Notes</button>
       <button class="modal-tab" onclick="_switchTab(this,'tab-notes')">Notes</button>
+      <button class="modal-tab" onclick="_switchTab(this,'tab-attachments');loadAttachments('${c.id}')">📎 Attachments</button>
       ${c.stage === "open_claims" ? `<button class="modal-tab lor-tab" onclick="_switchTab(this,'tab-lor')">📨 LOR</button>` : ""}
     </div>
     <form id="case-edit-form" onsubmit="saveCaseEdit(event, '${c.id}')">
@@ -431,6 +432,11 @@ function openCaseDetail(caseId) {
       <div id="tab-notes" class="tab-pane">
         <div class="form-group full-width"><label>Notes</label><textarea name="notes" rows="6">${escapeHtml(c.notes || "")}</textarea></div>
         ${c.caseValueRange ? `<div style="margin-top:12px;padding:12px;background:var(--bg-card);border-radius:8px;border:1px solid var(--border)"><div style="font-weight:600;font-size:13px;margin-bottom:4px">AI Case Valuation</div><div style="font-size:13px;color:var(--text-secondary)">${escapeHtml(c.caseValueRange)}</div></div>` : ""}
+      </div>
+      <div id="tab-attachments" class="tab-pane">
+        <div id="attachments-list-${c.id}" style="padding:8px">
+          <div class="text-muted" style="font-size:13px">Loading attachments...</div>
+        </div>
       </div>
       <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
         <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -1024,6 +1030,46 @@ function _switchTab(btn, tabId) {
   btn.classList.add("active");
   btn.closest(".modal-box").querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
   document.getElementById(tabId).classList.add("active");
+}
+
+// Load and render case attachments/documents in the Attachments tab
+async function loadAttachments(caseId) {
+  const container = document.getElementById(`attachments-list-${caseId}`);
+  if (!container) return;
+  container.innerHTML = `<div class="text-muted" style="font-size:13px">Loading attachments...</div>`;
+  try {
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+    const resp = await fetch(`${API_BASE}/api/case-documents?caseId=${encodeURIComponent(caseId)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const docs = await resp.json();
+    if (!docs || docs.length === 0) {
+      container.innerHTML = `<div class="text-muted" style="font-size:13px;padding:8px">No attachments yet.</div>`;
+      return;
+    }
+    const rows = docs.map(doc => {
+      const icon = doc.doc_type === "signed_agreement" ? "✅" : doc.doc_type === "fee_agreement" ? "📄" : "📎";
+      let filename = "";
+      try { filename = JSON.parse(doc.metadata || "{}").filename || ""; } catch (e) {}
+      const downloadLink = filename
+        ? `<a href="${API_BASE}/api/case-documents/download/${encodeURIComponent(filename)}" target="_blank" class="btn btn-sm btn-outline" style="font-size:12px">Download</a>`
+        : "";
+      const dateStr = doc.createdAt || doc.created_at || "";
+      const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border);">
+        <span style="font-size:20px">${icon}</span>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:14px">${escapeHtml(doc.title || "")}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${escapeHtml(doc.status || "")} · ${formattedDate}</div>
+        </div>
+        ${downloadLink}
+      </div>`;
+    });
+    container.innerHTML = rows.join("");
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:8px">Failed to load attachments: ${escapeHtml(err.message)}</div>`;
+  }
 }
 
 // AZ insurers list for datalist in modal
