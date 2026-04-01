@@ -748,25 +748,20 @@ async function _showAttorneyShareImport() {
   if (connected) {
     statusEl.innerHTML = `<div style="background:#22c55e22;border:1px solid #22c55e;padding:8px 12px;border-radius:6px;font-size:13px;color:#22c55e">✓ Attorney Share API connected</div>`;
     bodyEl.innerHTML = `
-      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">
-        <strong>Webhook URL:</strong> Set this in Attorney Share webhook settings:<br>
-        <code style="background:var(--bg-card);padding:4px 8px;border-radius:4px;font-size:12px;user-select:all">https://tools.sherlawgroup.com/api/attorney-share/webhook</code>
-      </p>
-      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">
-        New referrals will automatically appear in the <strong>New Intake</strong> column when Attorney Share sends them via webhook.
-      </p>
-
-      <div class="settings-section" style="margin-bottom:12px">
-        <h3 style="margin:0 0 8px">Recent Attorney Share Referrals</h3>
-        <div id="attyshare-cases"><p style="color:var(--text-muted)">Loading...</p></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <p style="color:var(--text-secondary);font-size:13px;margin:0">
+          Fetch pending referrals from Attorney Share, or they arrive automatically via webhook.
+        </p>
+        <button class="btn btn-primary btn-sm" id="attyshare-fetch-btn" onclick="_fetchAttorneyShareCases()" style="white-space:nowrap;margin-left:12px">
+          ⬇ Fetch Cases
+        </button>
       </div>
 
-      <div class="settings-section">
-        <h3 style="margin:0 0 8px">Manual Import (paste JSON)</h3>
-        <div class="form-group">
-          <textarea id="attyshare-json" rows="4" placeholder='{"clientName": "...", "caseType": "Auto Accident", ...}'></textarea>
-        </div>
-        <button class="btn btn-outline btn-sm" onclick="_importAttorneyShareJson()">Import JSON</button>
+      <div id="attyshare-fetch-results" style="margin-bottom:16px"></div>
+
+      <div class="settings-section" style="margin-bottom:12px">
+        <h3 style="margin:0 0 8px">Previously Imported</h3>
+        <div id="attyshare-cases"><p style="color:var(--text-muted);font-size:13px">Loading...</p></div>
       </div>
     `;
     _loadAttorneyShareCases();
@@ -842,6 +837,101 @@ async function _loadAttorneyShareCases() {
   } catch (err) {
     el.innerHTML = `<p style="color:var(--text-muted);font-size:13px">${escapeHtml(err.message)}</p>`;
   }
+}
+
+async function _fetchAttorneyShareCases() {
+  const btn = document.getElementById("attyshare-fetch-btn");
+  const resultsEl = document.getElementById("attyshare-fetch-results");
+  if (!resultsEl) return;
+  if (btn) { btn.disabled = true; btn.textContent = "Fetching..."; }
+  resultsEl.innerHTML = `<div class="agent-loading"><div class="spinner"></div><span>Fetching from Attorney Share...</span></div>`;
+
+  try {
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+    const resp = await fetch(`${API_BASE}/api/attorney-share/fetch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+
+    const referrals = data.referrals || [];
+    if (!referrals.length) {
+      resultsEl.innerHTML = `<p style="color:var(--text-muted);font-size:13px">No pending referrals found in Attorney Share.</p>`;
+      if (btn) { btn.disabled = false; btn.textContent = "⬇ Fetch Cases"; }
+      return;
+    }
+
+    resultsEl.innerHTML = `
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px">${referrals.length} referral(s) found — select to import:</div>
+      ${referrals.map((r, i) => `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:600;font-size:13px">${escapeHtml(r.clientName || "Unknown")}</div>
+            <div style="font-size:12px;color:var(--text-muted)">
+              ${escapeHtml(r.caseType || "")}${r.dateOfIncident ? " · " + escapeHtml(r.dateOfIncident) : ""}
+              ${r.referringAttorney ? " · Ref: " + escapeHtml(r.referringAttorney) : ""}
+            </div>
+            ${r.description ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${escapeHtml(r.description.slice(0,80))}${r.description.length>80?"…":""}</div>` : ""}
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="_importFetchedReferral(${i})" style="white-space:nowrap;margin-left:12px">Import</button>
+        </div>
+      `).join("")}
+      <button class="btn btn-accent btn-sm" onclick="_importAllFetchedReferrals()" style="margin-top:4px">Import All</button>
+    `;
+
+    // Store referrals in a temp variable for the import buttons
+    window._pendingAttorneyShareReferrals = referrals;
+  } catch (err) {
+    resultsEl.innerHTML = `<p style="color:#ef4444;font-size:13px">Error: ${escapeHtml(err.message)}</p>`;
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "⬇ Fetch Cases"; }
+}
+
+function _importFetchedReferral(index) {
+  const r = (window._pendingAttorneyShareReferrals || [])[index];
+  if (!r) return;
+  const newCase = addCase({
+    clientName: r.clientName || "Unknown",
+    caseType: r.caseType || "Other",
+    phone: r.phone || "",
+    email: r.email || "",
+    dateOfIncident: r.dateOfIncident || "",
+    description: r.description || "",
+    referralSource: "Attorney Share",
+    referringAttorney: r.referringAttorney || "",
+  });
+  renderKanbanBoard();
+  showToast(`Imported: ${r.clientName}`);
+  if (typeof onCaseCreate === "function") onCaseCreate(newCase.id);
+  // Remove from pending list and re-render the button
+  window._pendingAttorneyShareReferrals.splice(index, 1);
+  // Refresh the fetch results display
+  _fetchAttorneyShareCases();
+}
+
+function _importAllFetchedReferrals() {
+  const referrals = window._pendingAttorneyShareReferrals || [];
+  if (!referrals.length) return;
+  let count = 0;
+  for (const r of referrals) {
+    const newCase = addCase({
+      clientName: r.clientName || "Unknown",
+      caseType: r.caseType || "Other",
+      phone: r.phone || "",
+      email: r.email || "",
+      dateOfIncident: r.dateOfIncident || "",
+      description: r.description || "",
+      referralSource: "Attorney Share",
+      referringAttorney: r.referringAttorney || "",
+    });
+    if (typeof onCaseCreate === "function") onCaseCreate(newCase.id);
+    count++;
+  }
+  window._pendingAttorneyShareReferrals = [];
+  renderKanbanBoard();
+  closeCaseModal();
+  showToast(`Imported ${count} case(s) from Attorney Share`, "success");
 }
 
 function _importAttyShareCase(serverCaseId) {
