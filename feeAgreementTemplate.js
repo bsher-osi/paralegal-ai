@@ -95,14 +95,12 @@ IN WITNESS WHEREOF, the parties have executed this Agreement as of the date indi
 
 
 _______________________________          Date: _______________
-{{clientName}}
-\CLIENT_SIG\
+{{clientName}}                                    [Client Signature]
 
 
 _______________________________          Date: _______________
 Yelena Shimonova Sher, Esq.
-Sher Law Group
-\ATTORNEY_SIG\
+Sher Law Group                                  [Attorney Signature]
 `;
 
 /**
