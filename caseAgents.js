@@ -3,6 +3,10 @@
 
 const API_BASE = "";
 
+// SharePoint site drive root — all OneDrive/SharePoint operations target this site
+const SP_SITE = "sherlawgroupcom.sharepoint.com:/sites/SherLawGroup:";
+const SP_DRIVE_ROOT = `/sites/${SP_SITE}/drive/root`;
+
 // ─── Helpers ─────────────────────────────────────────────────
 
 /**
@@ -101,12 +105,16 @@ async function handleIntake(caseId) {
   const clientName = c.clientName || c.name || "Unknown Client";
   const caseType = c.caseType || c.type || "General";
   const folderName = `${clientName} - ${caseType}`;
-  const basePath = `/me/drive/root:/Cases/${folderName}:`;
 
-  // Create the root case folder first
-  await graphFetch("/me/drive/root:/Cases:/children", {
+  // Create Cases folder at SP root, then the case subfolder
+  await graphFetch(`${SP_DRIVE_ROOT}/children`, {
     method: "POST",
-    body: JSON.stringify({ name: folderName, folder: {} }),
+    body: JSON.stringify({ name: "Cases", folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+  }).catch(() => {}); // ignore if already exists
+
+  await graphFetch(`${SP_DRIVE_ROOT}:/Cases:/children`, {
+    method: "POST",
+    body: JSON.stringify({ name: folderName, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
   });
 
   const subfolders = [
@@ -122,25 +130,19 @@ async function handleIntake(caseId) {
 
   const results = await Promise.allSettled(
     subfolders.map((name) =>
-      graphFetch(`${basePath}/children`, {
+      graphFetch(`${SP_DRIVE_ROOT}:/Cases/${folderName}:/children`, {
         method: "POST",
-        body: JSON.stringify({ name, folder: {} }),
+        body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
       })
     )
   );
 
   const failed = results.filter((r) => r.status === "rejected");
   if (failed.length > 0) {
-    console.warn(
-      `[caseAgents] ${failed.length} subfolder(s) failed to create:`,
-      failed.map((r) => r.reason?.message)
-    );
+    console.warn(`[caseAgents] ${failed.length} subfolder(s) failed:`, failed.map((r) => r.reason?.message));
   }
 
-  showToast(
-    `OneDrive folder created: Cases/${escapeHtml(folderName)}`,
-    "success"
-  );
+  showToast(`SharePoint folder created: Cases/${escapeHtml(folderName)}`, "success");
 }
 
 /**
@@ -430,13 +432,13 @@ async function handleAgreementSigned(caseId) {
   }
 
   try {
-    // Ensure parent structure exists: Pre-Lit → Clients
-    await mkdirGraph("/me/drive/root", "Pre-Lit");
-    await mkdirGraph("/me/drive/root:/Pre-Lit", "Clients");
+    // Ensure parent structure exists in SharePoint: Pre-Lit → Clients
+    await mkdirGraph(SP_DRIVE_ROOT, "Pre-Lit");
+    await mkdirGraph(`${SP_DRIVE_ROOT}:/Pre-Lit`, "Clients");
 
     // Create the client folder
-    const clientPath = `/me/drive/root:/Pre-Lit/Clients/${clientName}`;
-    await mkdirGraph("/me/drive/root:/Pre-Lit/Clients", clientName);
+    const clientPath = `${SP_DRIVE_ROOT}:/Pre-Lit/Clients/${clientName}`;
+    await mkdirGraph(`${SP_DRIVE_ROOT}:/Pre-Lit/Clients`, clientName);
 
     // Create subfolders in parallel
     const subfolders = [
@@ -450,7 +452,7 @@ async function handleAgreementSigned(caseId) {
 
     await Promise.allSettled(
       subfolders.map((name) =>
-        graphFetch(`${clientPath}/children`, {
+        graphFetch(`${clientPath}:/children`, {
           method: "POST",
           body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
         }).catch((e) => {
@@ -459,7 +461,7 @@ async function handleAgreementSigned(caseId) {
       )
     );
 
-    showToast(`OneDrive folder created: Pre-Lit/Clients/${clientName}`, "success");
+    showToast(`SharePoint folder created: Pre-Lit/Clients/${clientName}`, "success");
     console.log(`[caseAgents] OneDrive folder created for ${clientName}`);
   } catch (err) {
     console.error("[caseAgents] OneDrive folder creation failed:", err);
