@@ -4,8 +4,8 @@
 const API_BASE = "";
 
 // SharePoint site drive — all folder operations target this site's document library
-// Graph API path: /sites/{hostname}:{site-path}:/drive
-const SP_DRIVE = "/sites/sherlawgroupcom.sharepoint.com:/sites/SherLawGroup:/drive";
+// Graph API path: /sites/{hostname}:{site-path}/drive  (no trailing colon after site path)
+const SP_DRIVE = "/sites/sherlawgroupcom.sharepoint.com:/sites/SherLawGroup/drive";
 
 // ─── Helpers ─────────────────────────────────────────────────
 
