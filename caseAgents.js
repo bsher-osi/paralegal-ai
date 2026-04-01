@@ -3,9 +3,9 @@
 
 const API_BASE = "";
 
-// SharePoint site drive root — all OneDrive/SharePoint operations target this site
-const SP_SITE = "sherlawgroupcom.sharepoint.com:/sites/SherLawGroup:";
-const SP_DRIVE_ROOT = `/sites/${SP_SITE}/drive/root`;
+// SharePoint site drive — all folder operations target this site's document library
+// Graph API path: /sites/{hostname}:{site-path}:/drive
+const SP_DRIVE = "/sites/sherlawgroupcom.sharepoint.com:/sites/SherLawGroup:/drive";
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -106,41 +106,30 @@ async function handleIntake(caseId) {
   const caseType = c.caseType || c.type || "General";
   const folderName = `${clientName} - ${caseType}`;
 
-  // Create Cases folder at SP root, then the case subfolder
-  await graphFetch(`${SP_DRIVE_ROOT}/children`, {
+  const ignore409 = (e) => { if (!String(e.message).includes("409") && !String(e.message).includes("nameAlreadyExists")) throw e; };
+
+  // Create Cases folder at drive root (use /root/children — no colon-path syntax at root level)
+  await graphFetch(`${SP_DRIVE}/root/children`, {
     method: "POST",
     body: JSON.stringify({ name: "Cases", folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
-  }).catch(() => {}); // ignore if already exists
+  }).catch(ignore409);
 
-  await graphFetch(`${SP_DRIVE_ROOT}:/Cases:/children`, {
+  // Create the case folder inside Cases (path-based syntax: root:/{path}:/children)
+  await graphFetch(`${SP_DRIVE}/root:/Cases:/children`, {
     method: "POST",
     body: JSON.stringify({ name: folderName, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
-  });
+  }).catch(ignore409);
 
-  const subfolders = [
-    "Intake",
-    "Correspondence",
-    "Medical Records",
-    "Settlement",
-    "Liens",
-    "Health Insurance",
-    "Police Report",
-    "Demand",
-  ];
+  const subfolders = ["Intake", "Correspondence", "Medical Records", "Settlement", "Liens", "Health Insurance", "Police Report", "Demand"];
 
-  const results = await Promise.allSettled(
+  await Promise.allSettled(
     subfolders.map((name) =>
-      graphFetch(`${SP_DRIVE_ROOT}:/Cases/${folderName}:/children`, {
+      graphFetch(`${SP_DRIVE}/root:/Cases/${folderName}:/children`, {
         method: "POST",
         body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
-      })
+      }).catch(ignore409)
     )
   );
-
-  const failed = results.filter((r) => r.status === "rejected");
-  if (failed.length > 0) {
-    console.warn(`[caseAgents] ${failed.length} subfolder(s) failed:`, failed.map((r) => r.reason?.message));
-  }
 
   showToast(`SharePoint folder created: Cases/${escapeHtml(folderName)}`, "success");
 }
@@ -419,45 +408,35 @@ async function handleAgreementSigned(caseId) {
     return;
   }
 
-  // Helper: create a folder, silently ignore 409 Conflict (already exists)
-  async function mkdirGraph(path, name) {
-    try {
-      await graphFetch(`${path}:/children`, {
-        method: "POST",
-        body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
-      });
-    } catch (e) {
-      if (!String(e.message).includes("409") && !String(e.message).includes("nameAlreadyExists")) throw e;
-    }
-  }
+  const ignore409 = (e) => { if (!String(e.message).includes("409") && !String(e.message).includes("nameAlreadyExists")) throw e; };
 
   try {
-    // Ensure parent structure exists in SharePoint: Pre-Lit → Clients
-    await mkdirGraph(SP_DRIVE_ROOT, "Pre-Lit");
-    await mkdirGraph(`${SP_DRIVE_ROOT}:/Pre-Lit`, "Clients");
+    // Create Pre-Lit at drive root (/root/children — no colon at root level)
+    await graphFetch(`${SP_DRIVE}/root/children`, {
+      method: "POST",
+      body: JSON.stringify({ name: "Pre-Lit", folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    }).catch(ignore409);
 
-    // Create the client folder
-    const clientPath = `${SP_DRIVE_ROOT}:/Pre-Lit/Clients/${clientName}`;
-    await mkdirGraph(`${SP_DRIVE_ROOT}:/Pre-Lit/Clients`, clientName);
+    // Create Clients inside Pre-Lit (path-based: root:/{path}:/children)
+    await graphFetch(`${SP_DRIVE}/root:/Pre-Lit:/children`, {
+      method: "POST",
+      body: JSON.stringify({ name: "Clients", folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    }).catch(ignore409);
 
-    // Create subfolders in parallel
-    const subfolders = [
-      "Correspondence",
-      "Costs",
-      "Intake",
-      "Investigation",
-      "Medical Records",
-      "Property Damage",
-    ];
+    // Create client folder inside Pre-Lit/Clients
+    await graphFetch(`${SP_DRIVE}/root:/Pre-Lit/Clients:/children`, {
+      method: "POST",
+      body: JSON.stringify({ name: clientName, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    }).catch(ignore409);
 
+    // Create subfolders inside the client folder
+    const subfolders = ["Correspondence", "Costs", "Intake", "Investigation", "Medical Records", "Property Damage"];
     await Promise.allSettled(
       subfolders.map((name) =>
-        graphFetch(`${clientPath}:/children`, {
+        graphFetch(`${SP_DRIVE}/root:/Pre-Lit/Clients/${clientName}:/children`, {
           method: "POST",
           body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
-        }).catch((e) => {
-          if (!String(e.message).includes("409") && !String(e.message).includes("nameAlreadyExists")) throw e;
-        })
+        }).catch(ignore409)
       )
     );
 
