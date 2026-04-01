@@ -431,12 +431,12 @@ async function handleAgreementSigned(caseId) {
 
   try {
     // Ensure parent structure exists: Pre-Lit → Clients
-    await mkdirGraph("/me/drive/root:", "Pre-Lit");
-    await mkdirGraph("/me/drive/root:/Pre-Lit:", "Clients");
+    await mkdirGraph("/me/drive/root", "Pre-Lit");
+    await mkdirGraph("/me/drive/root:/Pre-Lit", "Clients");
 
     // Create the client folder
-    const clientPath = `/me/drive/root:/Pre-Lit/Clients/${clientName}:`;
-    await mkdirGraph("/me/drive/root:/Pre-Lit/Clients:", clientName);
+    const clientPath = `/me/drive/root:/Pre-Lit/Clients/${clientName}`;
+    await mkdirGraph("/me/drive/root:/Pre-Lit/Clients", clientName);
 
     // Create subfolders in parallel
     const subfolders = [
