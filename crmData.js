@@ -434,6 +434,14 @@ function openCaseDetail(caseId) {
         ${c.caseValueRange ? `<div style="margin-top:12px;padding:12px;background:var(--bg-card);border-radius:8px;border:1px solid var(--border)"><div style="font-weight:600;font-size:13px;margin-bottom:4px">AI Case Valuation</div><div style="font-size:13px;color:var(--text-secondary)">${escapeHtml(c.caseValueRange)}</div></div>` : ""}
       </div>
       <div id="tab-attachments" class="tab-pane">
+        <div style="padding:8px 8px 4px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;color:var(--text-muted)">Files saved here are also uploaded to SharePoint.</span>
+          <label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0">
+            📎 Upload File
+            <input type="file" id="attach-upload-${c.id}" multiple style="display:none"
+              onchange="uploadAttachments('${c.id}', this)">
+          </label>
+        </div>
         <div id="attachments-list-${c.id}" style="padding:8px">
           <div class="text-muted" style="font-size:13px">Loading attachments...</div>
         </div>
@@ -1174,6 +1182,110 @@ async function loadAttachments(caseId) {
   } catch (err) {
     container.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:8px">Failed to load attachments: ${escapeHtml(err.message)}</div>`;
   }
+}
+
+/**
+ * Upload one or more files: save to backend + upload to SharePoint Attachments folder.
+ */
+async function uploadAttachments(caseId, input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+
+  const c = loadCases().find(x => x.id === caseId);
+  if (!c) return;
+
+  const container = document.getElementById(`attachments-list-${caseId}`);
+  const originalHtml = container ? container.innerHTML : "";
+  if (container) container.innerHTML = `<div class="text-muted" style="font-size:13px;padding:8px">Uploading ${files.length} file(s)…</div>`;
+
+  const token = typeof getIdToken === "function" ? await getIdToken() : null;
+  let uploaded = 0;
+  const errors = [];
+
+  for (const file of files) {
+    try {
+      // 1. Upload to backend
+      const form = new FormData();
+      form.append("file", file);
+      form.append("caseId", caseId);
+      form.append("title", file.name);
+
+      const resp = await fetch(`${API_BASE}/api/case-documents/upload`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => ({}));
+        throw new Error(e.error || `HTTP ${resp.status}`);
+      }
+      const result = await resp.json();
+
+      // 2. Upload to SharePoint Attachments folder (async, best-effort)
+      if (result.filename && typeof getSpDrive === "function" && typeof getAccessToken === "function") {
+        _uploadFileToSharePointAttachments(c, file, result.filename).catch(err =>
+          console.warn(`[uploadAttachments] SharePoint upload failed for ${file.name}:`, err.message)
+        );
+      }
+
+      uploaded++;
+    } catch (err) {
+      errors.push(`${file.name}: ${err.message}`);
+    }
+  }
+
+  // Reset input so same file can be re-uploaded
+  input.value = "";
+
+  if (errors.length) {
+    showToast(`Upload failed: ${errors[0]}`, "error");
+  } else {
+    showToast(`✅ ${uploaded} file(s) uploaded`, "success");
+  }
+
+  // Reload attachment list
+  loadAttachments(caseId);
+}
+
+/**
+ * Upload a file blob to SharePoint Pre-Lit/Clients/{clientName}/Attachments/.
+ */
+async function _uploadFileToSharePointAttachments(c, file, savedFilename) {
+  const clientName = (c.clientName || "Unknown Client").trim();
+  const spd = await getSpDrive();
+  const token = await getAccessToken();
+  if (!token) return;
+
+  const ignore409 = (e) => {
+    if (!String(e.message).includes("409") && !String(e.message).includes("nameAlreadyExists")) throw e;
+  };
+
+  // Ensure folder path exists
+  for (const [parent, name] of [
+    [`${spd}/root/children`, "Pre-Lit"],
+    [`${spd}/root:/Pre-Lit:/children`, "Clients"],
+    [`${spd}/root:/Pre-Lit/Clients:/children`, clientName],
+    [`${spd}/root:/Pre-Lit/Clients/${clientName}:/children`, "Attachments"],
+  ]) {
+    await fetch(`https://graph.microsoft.com/v1.0${parent}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    }).then(r => { if (!r.ok && r.status !== 409) throw new Error(`Folder create ${r.status}`); }).catch(ignore409);
+  }
+
+  // Upload the file (use original file name, not the UUID-prefixed server name)
+  const uploadUrl = `https://graph.microsoft.com/v1.0${spd}/root:/Pre-Lit/Clients/${clientName}/Attachments/${encodeURIComponent(file.name)}:/content`;
+  const r = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(`HTTP ${r.status}: ${body.slice(0, 150)}`);
+  }
+  console.log(`[uploadAttachments] ${file.name} → SharePoint ${clientName}/Attachments/`);
 }
 
 // AZ insurers list for datalist in modal
