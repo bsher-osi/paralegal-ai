@@ -301,17 +301,80 @@ async function checkAgreementStatus(caseId) {
     return;
   }
 
+  showToast("Checking DocuSign status…", "info");
   try {
-    const result = await agentApiFetch(`/api/esign/status/${c.docusignEnvelopeId}`);
+    // Use /sync which queries DocuSign live, downloads PDF if completed, updates DB
+    const result = await agentApiFetch(`/api/esign/sync`, {
+      method: "POST",
+      body: JSON.stringify({ envelopeId: c.docusignEnvelopeId, caseId }),
+    });
+
     if (result?.status === "completed") {
       markAgreementSigned(caseId);
-      showToast("Fee agreement has been signed!", "success");
+      showToast("✅ Fee agreement signed — case moved to Agreement Signed", "success");
+
+      // Refresh attachments tab if open
+      if (typeof loadAttachments === "function") loadAttachments(caseId);
+
+      // Upload signed PDF to SharePoint Attachments folder
+      if (result.filename && typeof getSpDrive === "function") {
+        _uploadSignedPdfToSharePoint(c, result.filename).catch(err => {
+          console.warn("[feeAgreement] SharePoint upload failed:", err.message);
+        });
+      }
     } else {
       showToast(`Agreement status: ${result?.status || "unknown"}`, "info");
     }
   } catch (err) {
     showToast("Failed to check status: " + err.message, "error");
   }
+}
+
+/**
+ * Download signed PDF from backend and upload to SharePoint Attachments folder.
+ */
+async function _uploadSignedPdfToSharePoint(c, filename) {
+  const clientName = (c.clientName || "Unknown Client").trim();
+  const downloadUrl = `/api/case-documents/download/${filename}`;
+
+  // Download the PDF as a blob
+  const pdfResp = await fetch(downloadUrl);
+  if (!pdfResp.ok) throw new Error(`PDF download failed: ${pdfResp.status}`);
+  const pdfBlob = await pdfResp.blob();
+
+  // Resolve SharePoint drive (cached after first call)
+  const spd = await getSpDrive();
+  const spFileName = "Fee Agreement - Signed.pdf";
+
+  // Ensure Attachments folder exists under Pre-Lit/Clients/{clientName}
+  const ignore409 = (e) => {
+    if (!String(e.message).includes("409") && !String(e.message).includes("nameAlreadyExists")) throw e;
+  };
+  await graphFetch(`${spd}/root:/Pre-Lit/Clients/${clientName}:/children`, {
+    method: "POST",
+    body: JSON.stringify({ name: "Attachments", folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+  }).catch(ignore409);
+
+  // Upload PDF using PUT to the file path
+  const uploadUrl = `${spd}/root:/Pre-Lit/Clients/${clientName}/Attachments/${spFileName}:/content`;
+  const token = await getAccessToken();
+  if (!token) throw new Error("Not authenticated with Microsoft");
+
+  const uploadResp = await fetch(`https://graph.microsoft.com/v1.0${uploadUrl}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/pdf",
+    },
+    body: pdfBlob,
+  });
+  if (!uploadResp.ok) {
+    const body = await uploadResp.text();
+    throw new Error(`SharePoint upload failed: ${uploadResp.status} ${body.slice(0, 200)}`);
+  }
+
+  showToast(`📁 Signed agreement uploaded to SharePoint`, "success");
+  console.log(`[feeAgreement] Uploaded ${spFileName} to SharePoint Pre-Lit/Clients/${clientName}/Attachments/`);
 }
 
 /**

@@ -139,7 +139,7 @@ async function handleIntake(caseId) {
     body: JSON.stringify({ name: folderName, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
   }).catch(ignore409);
 
-  const subfolders = ["Intake", "Correspondence", "Medical Records", "Settlement", "Liens", "Health Insurance", "Police Report", "Demand"];
+  const subfolders = ["Intake", "Correspondence", "Medical Records", "Settlement", "Liens", "Health Insurance", "Police Report", "Demand", "Attachments"];
 
   await Promise.allSettled(
     subfolders.map((name) =>
@@ -451,7 +451,7 @@ async function handleAgreementSigned(caseId) {
     }).catch(ignore409);
 
     // Create subfolders inside the client folder
-    const subfolders = ["Correspondence", "Costs", "Intake", "Investigation", "Medical Records", "Property Damage"];
+    const subfolders = ["Correspondence", "Costs", "Intake", "Investigation", "Medical Records", "Property Damage", "Attachments"];
     await Promise.allSettled(
       subfolders.map((name) =>
         graphFetch(`${spd}/root:/Pre-Lit/Clients/${clientName}:/children`, {
