@@ -467,7 +467,7 @@ function saveCaseEdit(event, caseId) {
   event.preventDefault();
   const form = event.target;
   const data = Object.fromEntries(new FormData(form));
-  updateCase(caseId, data);
+  const updated = updateCase(caseId, data);
   renderKanbanBoard();
   showToast("Case updated successfully");
   // Re-render modal in place so Insurance changes immediately show in LOR tab
@@ -477,6 +477,12 @@ function saveCaseEdit(event, caseId) {
     const tabPane = document.getElementById(activeTabId);
     const tabBtn  = document.querySelector(`[onclick*="'${activeTabId}'"]`);
     if (tabPane && tabBtn) _switchTab(tabBtn, activeTabId);
+  }
+  // Async: sync notes (Welcome Call, Phone Notes, Case Notes) to SharePoint in background
+  if (updated && typeof syncNotesToSharePoint === "function") {
+    syncNotesToSharePoint(updated).catch(err =>
+      console.warn("[saveCaseEdit] SharePoint notes sync error:", err.message)
+    );
   }
 }
 

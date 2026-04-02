@@ -469,6 +469,125 @@ async function handleAgreementSigned(caseId) {
   }
 }
 
+// ─── Notes → SharePoint Sync ─────────────────────────────────
+
+/**
+ * Build a minimal RTF document string.
+ * RTF is plain text, opens natively in Word, and requires no ZIP/binary encoding.
+ */
+function _createRtfDocument(title, content, c) {
+  // Escape RTF special chars; convert newlines to \par; encode non-ASCII as \uNNN?
+  const esc = (s) =>
+    (s || "")
+      .replace(/\\/g, "\\\\")
+      .replace(/\{/g, "\\{")
+      .replace(/\}/g, "\\}")
+      .replace(/\r\n/g, "\n")
+      .replace(/\n/g, "\\par\n")
+      .replace(/[^\x00-\x7F]/g, (ch) => `\\u${ch.charCodeAt(0)}?`);
+
+  const dateStr = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const meta = `Client: ${c.clientName || ""} | ${c.caseType || ""} | Last Updated: ${dateStr}`;
+
+  return (
+    `{\\rtf1\\ansi\\deff0\n` +
+    `{\\fonttbl{\\f0\\fswiss\\fcharset0 Arial;}}\n` +
+    `{\\colortbl ;\\red0\\green0\\blue0;\\red80\\green80\\blue180;}\n` +
+    `\\f0\\fs24\\cf1\n` +
+    `{\\b\\fs32 ${esc(title)}}\\par\n` +
+    `{\\fs18\\cf2 ${esc(meta)}}\\par\n` +
+    `\\cf1\\par\n` +
+    `${esc(content)}\\par\n` +
+    `}`
+  );
+}
+
+/**
+ * Sync Welcome Call Notes, Phone Notes, and Case Notes to SharePoint
+ * Pre-Lit/Clients/{clientName}/Correspondence/ as .rtf files.
+ *
+ * Called after every Save Changes. Runs async in background — never blocks UI.
+ * Skips empty fields. Creates folders if missing.
+ */
+async function syncNotesToSharePoint(c) {
+  if (typeof graphFetch !== "function" || typeof getSpDrive !== "function") return;
+  if (!c) return;
+
+  const clientName = (c.clientName || "Unknown Client").trim();
+
+  let spd;
+  try {
+    spd = await getSpDrive();
+  } catch (err) {
+    console.warn("[caseAgents] syncNotes: could not resolve SharePoint drive:", err.message);
+    return;
+  }
+
+  const ignore409 = (e) => {
+    if (!String(e.message).includes("409") && !String(e.message).includes("nameAlreadyExists")) throw e;
+  };
+
+  // Ensure parent folders exist (idempotent)
+  try {
+    await graphFetch(`${spd}/root/children`, {
+      method: "POST",
+      body: JSON.stringify({ name: "Pre-Lit", folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    }).catch(ignore409);
+    await graphFetch(`${spd}/root:/Pre-Lit:/children`, {
+      method: "POST",
+      body: JSON.stringify({ name: "Clients", folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    }).catch(ignore409);
+    await graphFetch(`${spd}/root:/Pre-Lit/Clients:/children`, {
+      method: "POST",
+      body: JSON.stringify({ name: clientName, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    }).catch(ignore409);
+    await graphFetch(`${spd}/root:/Pre-Lit/Clients/${clientName}:/children`, {
+      method: "POST",
+      body: JSON.stringify({ name: "Correspondence", folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    }).catch(ignore409);
+  } catch (err) {
+    console.warn("[caseAgents] syncNotes: folder creation failed:", err.message);
+    return;
+  }
+
+  const token = typeof getAccessToken === "function" ? await getAccessToken() : null;
+  if (!token) return;
+
+  const docs = [
+    { field: "welcomeCallNotes", title: "Welcome Call Notes", filename: "Welcome Call Notes.rtf" },
+    { field: "phoneNotes",       title: "Phone Notes",        filename: "Phone Notes.rtf"        },
+    { field: "notes",            title: "Case Notes",         filename: "Case Notes.rtf"          },
+  ];
+
+  let synced = 0;
+  for (const { field, title, filename } of docs) {
+    const content = (c[field] || "").trim();
+    if (!content) continue;
+
+    const rtf = _createRtfDocument(title, content, c);
+    const uploadUrl = `https://graph.microsoft.com/v1.0${spd}/root:/Pre-Lit/Clients/${clientName}/Correspondence/${encodeURIComponent(filename)}:/content`;
+
+    try {
+      const r = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/rtf" },
+        body: rtf,
+      });
+      if (!r.ok) {
+        const body = await r.text();
+        throw new Error(`HTTP ${r.status}: ${body.slice(0, 100)}`);
+      }
+      synced++;
+    } catch (err) {
+      console.warn(`[caseAgents] syncNotes: failed to upload ${filename}:`, err.message);
+    }
+  }
+
+  if (synced > 0) {
+    console.log(`[caseAgents] Synced ${synced} note(s) to SharePoint for ${clientName}`);
+  }
+}
+
 // ─── Main Dispatcher ─────────────────────────────────────────
 
 /**
