@@ -748,13 +748,15 @@ async function _showAttorneyShareImport() {
   if (connected) {
     statusEl.innerHTML = `<div style="background:#22c55e22;border:1px solid #22c55e;padding:8px 12px;border-radius:6px;font-size:13px;color:#22c55e">✓ Attorney Share API connected</div>`;
     bodyEl.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <p style="color:var(--text-secondary);font-size:13px;margin:0">
-          Fetch pending referrals from Attorney Share, or they arrive automatically via webhook.
+      <div style="margin-bottom:16px">
+        <p style="color:var(--text-secondary);font-size:13px;margin:0 0 8px">
+          Cases arrive automatically when Attorney Share sends them via webhook.<br>
+          <span style="color:var(--text-muted);font-size:12px">
+            Attorney Share's API is send-only — there is no pull endpoint. To receive your 3 pending cases,
+            go to <strong>Attorney Share → Settings → Webhooks</strong> and set your webhook URL to:<br>
+            <code style="font-size:11px;background:var(--bg-card);padding:2px 6px;border-radius:4px;word-break:break-all">https://lens.sherlawgroup.com/api/attorney-share/webhook</code>
+          </span>
         </p>
-        <button class="btn btn-primary btn-sm" id="attyshare-fetch-btn" onclick="_fetchAttorneyShareCases()" style="white-space:nowrap;margin-left:12px">
-          ⬇ Fetch Cases
-        </button>
       </div>
 
       <div id="attyshare-fetch-results" style="margin-bottom:16px"></div>
