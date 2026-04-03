@@ -376,7 +376,13 @@ function openCaseDetail(caseId) {
           <div class="form-group"><label>Date of Birth</label><input name="dob" type="date" value="${c.dob || ""}" /></div>
           <div class="form-group"><label>Address</label><input name="address" value="${escapeHtml(c.address || "")}" /></div>
           <div class="form-group"><label>Driver's License</label><input name="driverLicense" value="${escapeHtml(c.driverLicense || "")}" /></div>
-          <div class="form-group"><label>Referral Source</label><input name="referralSource" value="${escapeHtml(c.referralSource || "")}" /></div>
+          <div class="form-group"><label>Referral Source</label>
+            <select name="referralSource">
+              ${["","Attorney Share","Leximica","Crash Legal","Direct","Other"].map(s =>
+                `<option value="${s}"${(c.referralSource||"")==s?" selected":""}>${s||"— Select —"}</option>`
+              ).join("")}
+            </select>
+          </div>
           <div class="form-group"><label>Date of Incident</label><input name="dateOfIncident" type="date" value="${c.dateOfIncident || ""}" /></div>
           <div class="form-group"><label>SOL</label><input name="statuteOfLimitations" type="date" value="${c.statuteOfLimitations || ""}" /></div>
           <div class="form-group"><label>Estimated Value</label><input name="estimatedValue" value="${escapeHtml(c.estimatedValue || "")}" /></div>
@@ -563,7 +569,13 @@ function openNewCaseForm() {
           <div class="form-group"><label>Address</label><input name="address" /></div>
           <div class="form-group"><label>Date of Incident</label><input name="dateOfIncident" type="date" /></div>
           <div class="form-group"><label>SOL</label><input name="statuteOfLimitations" type="date" /></div>
-          <div class="form-group"><label>Referral Source</label><input name="referralSource" /></div>
+          <div class="form-group"><label>Referral Source</label>
+            <select name="referralSource">
+              ${["","Attorney Share","Leximica","Crash Legal","Direct","Other"].map(s =>
+                `<option value="${s}">${s||"— Select —"}</option>`
+              ).join("")}
+            </select>
+          </div>
           <div class="form-group"><label>Driver's License</label><input name="driverLicense" /></div>
         </div>
       </div>
@@ -709,7 +721,13 @@ async function _parseEmailReferral() {
           <div class="form-group"><label>Phone</label><input id="ei-phone" value="${escapeHtml(extracted.phone || "")}" /></div>
           <div class="form-group"><label>Email</label><input id="ei-email" value="${escapeHtml(extracted.email || "")}" /></div>
           <div class="form-group"><label>Date of Incident</label><input type="date" id="ei-doi" value="${extracted.dateOfIncident || ""}" /></div>
-          <div class="form-group"><label>Referral</label><input id="ei-ref" value="${escapeHtml(extracted.referralSource || "")}" /></div>
+          <div class="form-group"><label>Referral Source</label>
+            <select id="ei-ref">
+              ${["","Attorney Share","Leximica","Crash Legal","Direct","Other"].map(s =>
+                `<option value="${s}"${(extracted.referralSource||"")==s?" selected":""}>${s||"— Select —"}</option>`
+              ).join("")}
+            </select>
+          </div>
         </div>
         <div class="form-group full-width"><label>Description</label><textarea id="ei-desc" rows="2">${escapeHtml(extracted.description || "")}</textarea></div>
         <div class="form-group full-width"><label>Notes</label><textarea id="ei-notes" rows="2">${escapeHtml(extracted.notes || "")}</textarea></div>
