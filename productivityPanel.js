@@ -1,172 +1,93 @@
-// ─── Paralegal Productivity Panel ─────────────────────────────────
-// Task tracking (localStorage) + dashboard with stats
-
-const TASK_STORAGE_KEY = "paralegal_tasks";
-
-function _loadTasks() {
-  try { return JSON.parse(localStorage.getItem(TASK_STORAGE_KEY)) || []; } catch { return []; }
-}
-function _saveTasks(tasks) { localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks)); }
+// productivityPanel.js — Dashboard: 3 rows of monthly case counts (12 months)
 
 function renderProductivityPanel() {
   const container = document.getElementById("productivity-content");
   if (!container) return;
 
-  const tasks = _loadTasks();
   const cases = typeof loadCases === "function" ? loadCases() : [];
 
-  container.innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" onclick="_showAddTask()">+ Add Task</button>
-      <select id="prod-filter" onchange="_renderTaskBoard()" style="padding:4px 8px;border-radius:6px;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border)">
-        <option value="all">All Cases</option>
-        ${cases.map(c => `<option value="${c.id}">${escapeHtml(c.clientName)}</option>`).join("")}
-      </select>
-    </div>
-    <div id="add-task-area"></div>
-
-    <div class="settings-section" style="margin-bottom:16px">
-      <h2 style="margin:0 0 8px">Dashboard</h2>
-      <div id="prod-stats">${_renderStats(tasks)}</div>
-    </div>
-
-    <div id="task-board">${_renderTaskColumns(tasks, "all")}</div>
-  `;
-}
-
-function _renderStats(tasks) {
+  // Build array of last 12 months: [{ label:"Apr '25", year:2025, month:3 }, ...]
+  const months = [];
   const now = new Date();
-  const weekAgo = new Date(now - 7 * 86400000);
-  const monthAgo = new Date(now - 30 * 86400000);
-  const doneThisWeek = tasks.filter(t => t.status === "done" && new Date(t.updated_at) >= weekAgo).length;
-  const doneThisMonth = tasks.filter(t => t.status === "done" && new Date(t.updated_at) >= monthAgo).length;
-  const pending = tasks.filter(t => t.status !== "done").length;
-  const overdue = tasks.filter(t => t.status !== "done" && t.due_date && new Date(t.due_date) < now).length;
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      label: d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      year:  d.getFullYear(),
+      month: d.getMonth(), // 0-indexed
+    });
+  }
 
-  return `
-    <div style="display:flex;gap:16px;flex-wrap:wrap">
-      <div style="flex:1;min-width:120px;text-align:center;padding:12px;background:var(--bg-card);border-radius:8px">
-        <div style="font-size:24px;font-weight:700;color:var(--success)">${doneThisWeek}</div>
-        <div style="font-size:12px;color:var(--text-muted)">Done This Week</div>
-      </div>
-      <div style="flex:1;min-width:120px;text-align:center;padding:12px;background:var(--bg-card);border-radius:8px">
-        <div style="font-size:24px;font-weight:700;color:var(--accent)">${doneThisMonth}</div>
-        <div style="font-size:12px;color:var(--text-muted)">Done This Month</div>
-      </div>
-      <div style="flex:1;min-width:120px;text-align:center;padding:12px;background:var(--bg-card);border-radius:8px">
-        <div style="font-size:24px;font-weight:700;color:#f59e0b">${pending}</div>
-        <div style="font-size:12px;color:var(--text-muted)">Pending</div>
-      </div>
-      <div style="flex:1;min-width:120px;text-align:center;padding:12px;background:var(--bg-card);border-radius:8px">
-        <div style="font-size:24px;font-weight:700;color:var(--danger)">${overdue}</div>
-        <div style="font-size:12px;color:var(--text-muted)">Overdue</div>
-      </div>
-    </div>
-  `;
-}
+  // Helper: which bucket does a date string fall into?
+  function bucket(dateStr) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d)) return null;
+    return `${d.getFullYear()}-${d.getMonth()}`;
+  }
 
-function _renderTaskColumns(tasks, filterCaseId) {
-  const filtered = filterCaseId === "all" ? tasks : tasks.filter(t => t.case_id === filterCaseId);
-  const cols = [
-    { key: "todo", label: "To Do", color: "var(--text-muted)" },
-    { key: "in_progress", label: "In Progress", color: "#f59e0b" },
-    { key: "done", label: "Done", color: "var(--success)" },
+  // Row 1 — Incoming: counted by createdAt
+  const incomingMap = {};
+  cases.forEach(c => {
+    const b = bucket(c.createdAt || c.created_at);
+    if (b) incomingMap[b] = (incomingMap[b] || 0) + 1;
+  });
+
+  // Row 2 — Signed: stage is fee_agreement_signed or any later stage
+  // Proxy: updatedAt when the case was last touched at that stage
+  const SIGNED_STAGES = new Set([
+    "fee_agreement_signed","open_claims","lor_sent","client_treating",
+    "lien_search","collecting_records","demand_prep","demand_sent",
+    "negotiations","send_acceptance","settled","closed",
+  ]);
+  const signedMap = {};
+  cases.filter(c => SIGNED_STAGES.has(c.stage)).forEach(c => {
+    const b = bucket(c.updatedAt || c.updated_at);
+    if (b) signedMap[b] = (signedMap[b] || 0) + 1;
+  });
+
+  // Row 3 — Closed: settled or closed stage
+  const closedMap = {};
+  cases.filter(c => c.stage === "settled" || c.stage === "closed").forEach(c => {
+    const b = bucket(c.updatedAt || c.updated_at);
+    if (b) closedMap[b] = (closedMap[b] || 0) + 1;
+  });
+
+  const rows = [
+    { label: "Incoming Cases",   map: incomingMap, color: "#6366f1" },
+    { label: "Agreement Signed", map: signedMap,   color: "#22c55e" },
+    { label: "Closed Cases",     map: closedMap,   color: "#f59e0b" },
   ];
 
-  return `<div style="display:flex;gap:12px;flex-wrap:wrap">${cols.map(col => {
-    const items = filtered.filter(t => t.status === col.key);
-    return `
-      <div style="flex:1;min-width:220px">
-        <div style="font-weight:700;margin-bottom:8px;color:${col.color}">${col.label} (${items.length})</div>
-        ${items.length ? items.map(t => _renderTaskCard(t)).join("") : `<p style="color:var(--text-muted);font-size:12px">No tasks</p>`}
-      </div>`;
-  }).join("")}</div>`;
-}
+  container.innerHTML = `
+    <div style="max-width:860px;padding:4px 0">
+      ${rows.map(row => {
+        const counts = months.map(m => row.map[`${m.year}-${m.month}`] || 0);
+        const max    = Math.max(...counts, 1);
+        const total  = counts.reduce((a, b) => a + b, 0);
 
-function _renderTaskCard(t) {
-  const now = new Date(); now.setHours(0,0,0,0);
-  const overdue = t.status !== "done" && t.due_date && new Date(t.due_date) < now;
-  const priorities = { high: "#ef4444", medium: "#f59e0b", low: "#22c55e" };
-  const nextStatus = t.status === "todo" ? "in_progress" : t.status === "in_progress" ? "done" : null;
-
-  return `
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;${overdue ? 'border-left:3px solid var(--danger)' : ''}">
-      <div style="font-weight:600;font-size:13px">${escapeHtml(t.description)}</div>
-      <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">
-        ${t.priority ? `<span class="deadline-badge" style="background:${priorities[t.priority] || '#6b7280'}">${t.priority}</span>` : ""}
-        ${t.due_date ? `<span style="font-size:11px;color:${overdue ? 'var(--danger)' : 'var(--text-muted)'}">${t.due_date}</span>` : ""}
-        <span style="margin-left:auto;display:flex;gap:4px">
-          ${nextStatus ? `<button class="btn btn-sm" onclick="_moveTask('${t.id}','${nextStatus}')" style="padding:1px 6px;font-size:10px">${nextStatus === 'done' ? 'Done' : 'Start'}</button>` : ""}
-          <button class="btn btn-sm" onclick="_deleteTask('${t.id}')" style="padding:1px 6px;font-size:10px;color:var(--text-muted)">X</button>
-        </span>
-      </div>
-    </div>`;
-}
-
-function _renderTaskBoard() {
-  const filter = document.getElementById("prod-filter")?.value || "all";
-  const board = document.getElementById("task-board");
-  if (board) board.innerHTML = _renderTaskColumns(_loadTasks(), filter);
-}
-
-function _showAddTask() {
-  const area = document.getElementById("add-task-area");
-  if (!area) return;
-  const cases = typeof loadCases === "function" ? loadCases() : [];
-  area.innerHTML = `
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px">
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <div class="form-group" style="flex:2;min-width:200px">
-          <label>Description *</label>
-          <input type="text" id="task-desc" placeholder="What needs to be done?">
-        </div>
-        <div class="form-group" style="flex:1;min-width:120px">
-          <label>Due Date</label>
-          <input type="date" id="task-due">
-        </div>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <div class="form-group" style="flex:1">
-          <label>Case</label>
-          <select id="task-case"><option value="">-- None --</option>${cases.map(c => `<option value="${c.id}">${escapeHtml(c.clientName)}</option>`).join("")}</select>
-        </div>
-        <div class="form-group" style="flex:1">
-          <label>Priority</label>
-          <select id="task-priority"><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn btn-primary btn-sm" onclick="_addTask()">Add</button>
-        <button class="btn btn-outline btn-sm" onclick="document.getElementById('add-task-area').innerHTML=''">Cancel</button>
-      </div>
-    </div>`;
-}
-
-function _addTask() {
-  const desc = document.getElementById("task-desc")?.value?.trim();
-  if (!desc) { showToast("Description required", "error"); return; }
-  const tasks = _loadTasks();
-  tasks.push({
-    id: crypto.randomUUID(), description: desc, status: "todo",
-    case_id: document.getElementById("task-case")?.value || "",
-    due_date: document.getElementById("task-due")?.value || "",
-    priority: document.getElementById("task-priority")?.value || "medium",
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-  });
-  _saveTasks(tasks);
-  document.getElementById("add-task-area").innerHTML = "";
-  renderProductivityPanel();
-}
-
-function _moveTask(id, newStatus) {
-  const tasks = _loadTasks();
-  const t = tasks.find(t => t.id === id);
-  if (t) { t.status = newStatus; t.updated_at = new Date().toISOString(); }
-  _saveTasks(tasks);
-  renderProductivityPanel();
-}
-
-function _deleteTask(id) {
-  _saveTasks(_loadTasks().filter(t => t.id !== id));
-  renderProductivityPanel();
+        return `
+          <div style="margin-bottom:32px">
+            <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:10px">
+              <span style="font-size:15px;font-weight:700;color:var(--text-primary)">${row.label}</span>
+              <span style="font-size:13px;color:var(--text-muted)">${total} over last 12 months</span>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:6px;height:80px">
+              ${months.map((m, i) => {
+                const count  = counts[i];
+                const height = count === 0 ? 3 : Math.max(8, Math.round((count / max) * 72));
+                const isNow  = m.year === now.getFullYear() && m.month === now.getMonth();
+                return `
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0">
+                    <span style="font-size:11px;font-weight:600;color:${count ? 'var(--text-primary)' : 'transparent'}">${count || ""}</span>
+                    <div style="width:100%;height:${height}px;background:${count ? row.color : 'var(--border)'};border-radius:3px 3px 0 0;opacity:${isNow ? 1 : 0.7};transition:opacity .15s"
+                         title="${m.label}: ${count}"></div>
+                    <span style="font-size:10px;color:${isNow ? 'var(--text-primary)' : 'var(--text-muted)'};font-weight:${isNow ? 700 : 400};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;text-align:center">${m.label}</span>
+                  </div>`;
+              }).join("")}
+            </div>
+          </div>`;
+      }).join("")}
+    </div>
+  `;
 }
