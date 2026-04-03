@@ -448,6 +448,7 @@ function openCaseDetail(caseId) {
       </div>
       <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
         <button type="submit" class="btn btn-primary">Save Changes</button>
+        <button type="button" class="btn btn-outline" onclick="openFaxModal('${c.id}')" style="font-size:13px">📠 Send Fax</button>
         ${c.stage === "intake" ? `<button type="button" class="btn btn-accent" style="background:#a855f7" onclick="showFeeAgreementPreview('${c.id}')">Send Fee Agreement</button>` : ""}
         ${c.stage === "fee_agreement_sent" ? `<button type="button" class="btn btn-accent" style="background:#22c55e" onclick="markAgreementSigned('${c.id}')">Agreement Signed</button>` : ""}
         ${c.stage === "fee_agreement_sent" && c.docusignEnvelopeId ? `<button type="button" class="btn btn-outline" onclick="checkAgreementStatus('${c.id}')">Check Signature</button>` : ""}
@@ -952,6 +953,123 @@ function _importAllFetchedReferrals() {
   renderKanbanBoard();
   closeCaseModal();
   showToast(`Imported ${count} case(s) from Attorney Share`, "success");
+}
+
+// ─── Fax ─────────────────────────────────────────────────────
+
+function openFaxModal(caseId) {
+  const c = loadCases().find(x => x.id === caseId);
+  if (!c) return;
+
+  // Pre-fill insurance adjuster fax if available
+  const defaultFax = (c.adjusterFax || c.adjuster_fax || "").replace(/\D/g, "");
+  const defaultName = c.adjustorName || c.adjuster_name || c.insuranceCompany || c.insurance_company || "";
+
+  // Get attachments from DB for the "attach document" dropdown
+  (async () => {
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+    let docs = [];
+    try {
+      const r = await fetch(`${API_BASE}/api/case-documents?caseId=${encodeURIComponent(caseId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (r.ok) docs = await r.json();
+    } catch {}
+
+    const docOptions = docs
+      .filter(d => {
+        try { return JSON.parse(d.metadata || "{}").filename; } catch { return false; }
+      })
+      .map(d => {
+        let fn = ""; try { fn = JSON.parse(d.metadata).filename; } catch {}
+        return `<option value="${escapeHtml(fn)}">${escapeHtml(d.title || fn)}</option>`;
+      }).join("");
+
+    const existing = document.getElementById("fax-modal-overlay");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "fax-modal-overlay";
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center";
+    overlay.innerHTML = `
+      <div style="background:var(--bg-secondary);border-radius:12px;padding:24px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.4)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h3 style="margin:0;font-size:16px">📠 Send Fax</h3>
+          <button onclick="document.getElementById('fax-modal-overlay').remove()" style="background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer">×</button>
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label style="font-size:13px;font-weight:600">Recipient Fax Number</label>
+          <input id="fax-to-number" type="tel" placeholder="4805551234" value="${escapeHtml(defaultFax)}"
+            style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);font-size:14px;box-sizing:border-box">
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label style="font-size:13px;font-weight:600">Recipient Name</label>
+          <input id="fax-to-name" type="text" placeholder="e.g. Allstate — Jane Adjuster" value="${escapeHtml(defaultName)}"
+            style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);font-size:14px;box-sizing:border-box">
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label style="font-size:13px;font-weight:600">Subject</label>
+          <input id="fax-subject" type="text" value="Re: ${escapeHtml(c.clientName || "")} — ${escapeHtml(c.claimNumber || c.claim_number || "")}"
+            style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);font-size:14px;box-sizing:border-box">
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label style="font-size:13px;font-weight:600">Cover Sheet Message</label>
+          <textarea id="fax-message" rows="3"
+            style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);font-size:13px;box-sizing:border-box;resize:vertical"
+            placeholder="Optional note on the cover sheet..."></textarea>
+        </div>
+        ${docOptions ? `<div class="form-group" style="margin-bottom:16px">
+          <label style="font-size:13px;font-weight:600">Attach Document (optional)</label>
+          <select id="fax-attachment" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);font-size:13px">
+            <option value="">— Cover sheet only —</option>
+            ${docOptions}
+          </select>
+        </div>` : ""}
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="document.getElementById('fax-modal-overlay').remove()" class="btn btn-outline" style="font-size:13px">Cancel</button>
+          <button onclick="_submitFax('${caseId}')" id="fax-send-btn" class="btn btn-primary" style="font-size:13px">📠 Send Fax</button>
+        </div>
+        <div id="fax-status" style="margin-top:10px;font-size:13px"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  })();
+}
+
+async function _submitFax(caseId) {
+  const toFax    = (document.getElementById("fax-to-number")?.value || "").replace(/\D/g, "");
+  const toName   = document.getElementById("fax-to-name")?.value || "";
+  const subject  = document.getElementById("fax-subject")?.value || "Fax from Sher Law Group";
+  const message  = document.getElementById("fax-message")?.value || "";
+  const filename = document.getElementById("fax-attachment")?.value || "";
+  const statusEl = document.getElementById("fax-status");
+  const btn      = document.getElementById("fax-send-btn");
+
+  if (toFax.length < 10) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">Enter a valid 10-digit fax number.</span>`;
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+  if (statusEl) statusEl.innerHTML = `<span style="color:var(--text-muted)">Queuing fax…</span>`;
+
+  try {
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+    const resp = await fetch(`${API_BASE}/api/fax/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ caseId, toFax, toName, subject, message, filename }),
+    });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
+
+    if (statusEl) statusEl.innerHTML = `<span style="color:#22c55e">✅ ${escapeHtml(result.message)}</span>`;
+    showToast(`📠 Fax sent to ${toFax.slice(0,3)}-${toFax.slice(3,6)}-${toFax.slice(6)}`, "success");
+    setTimeout(() => { document.getElementById("fax-modal-overlay")?.remove(); }, 2000);
+  } catch (err) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">Error: ${escapeHtml(err.message)}</span>`;
+    if (btn) { btn.disabled = false; btn.textContent = "📠 Send Fax"; }
+  }
 }
 
 function _importAttyShareCase(serverCaseId) {
