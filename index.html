@@ -97,6 +97,9 @@
           <li><a onclick="switchPanel('contact')" data-panel="contact">
             <span class="nav-icon">&#128222;</span><span>Contact Log</span>
           </a></li>
+          <li><a onclick="switchPanel('fax')" data-panel="fax">
+            <span class="nav-icon">&#128224;</span><span>Send Fax</span>
+          </a></li>
           <li><a onclick="switchPanel('research')" data-panel="research">
             <span class="nav-icon">&#128269;</span><span>Legal Research</span>
           </a></li>
@@ -206,6 +209,12 @@
           <div id="litigation-content"></div>
         </div>
 
+        <!-- Fax Panel -->
+        <div id="panel-fax" class="panel">
+          <div class="panel-header"><h1>📠 Send Fax</h1></div>
+          <div id="fax-content"></div>
+        </div>
+
         <!-- Legal Research Panel -->
         <div id="panel-research" class="panel">
           <div class="panel-header"><h1>Legal Research</h1></div>
@@ -301,6 +310,7 @@
   <script src="contactPanel.js?v=20260401"></script>
   <script src="litigationPanel.js?v=20260401"></script>
   <script src="caseAgents.js?v=20260401"></script>
+  <script src="faxPanel.js?v=20260401"></script>
   <script src="feeAgreementTemplate.js?v=20260401"></script>
   <script src="solBanner.js?v=20260401"></script>
   <script>
@@ -356,6 +366,7 @@
       if (panelId === "contact") renderContactPanel();
       if (panelId === "litigation") renderLitigationPanel();
       if (panelId === "settings") updateSettingsPanel();
+      if (panelId === "fax") renderFaxPanel();
     }
 
     // ─── Bypass Auth (offline mode) ────────────────────────
