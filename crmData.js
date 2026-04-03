@@ -454,6 +454,7 @@ function openCaseDetail(caseId) {
         ${c.stage === "fee_agreement_sent" && c.docusignEnvelopeId ? `<button type="button" class="btn btn-outline" onclick="checkAgreementStatus('${c.id}')">Check Signature</button>` : ""}
         ${c.stage === "fee_agreement_signed" ? `<button type="button" class="btn btn-accent" style="background:#6d28d9" onclick="moveCaseToStage('${c.id}','open_claims');renderKanbanBoard();closeCaseModal();showToast('Moved to Open Claim')">Open Claim</button>` : ""}
         ${c.stage === "open_claims" ? `<button type="button" class="btn btn-accent" style="background:var(--slg-orange)" onclick="sendLORs('${c.id}')">📨 Send LORs</button>` : ""}
+        ${c.stage === "demand_prep" ? `<button type="button" class="btn btn-accent" style="background:#f59e0b;color:#000" onclick="openDemandForCase('${c.id}')">📄 Create Demand</button>` : ""}
         ${c.stage === "client_treating" ? `<button type="button" class="btn btn-accent" style="background:#14b8a6" onclick="moveCaseToStage('${c.id}','lien_search');renderKanbanBoard();closeCaseModal();showToast('Moved to Lien Search')">✅ Done Treating</button>` : ""}
         ${c.stage === "lien_search" ? `<button type="button" class="btn btn-accent" style="background:#3b82f6" onclick="moveCaseToStage('${c.id}','collecting_records');renderKanbanBoard();closeCaseModal();showToast('Moved to Collecting Records')">📋 Collect Records</button>` : ""}
         ${c.stage === "negotiations" ? `
@@ -470,6 +471,26 @@ function openCaseDetail(caseId) {
 
 function closeCaseModal() {
   document.getElementById("case-modal").classList.remove("open");
+}
+
+/**
+ * Navigate to the Demand panel with this case pre-selected and all fields populated.
+ * Called from the "Create Demand" button on demand_prep stage cards.
+ */
+function openDemandForCase(caseId) {
+  closeCaseModal();
+  // Switch to the Demand panel (triggers renderDemandPanel)
+  if (typeof switchPanel === "function") switchPanel("demand");
+  // After the panel renders, select the case and prefill all fields
+  setTimeout(() => {
+    const sel = document.getElementById("demand-case-select");
+    if (sel) {
+      sel.value = caseId;
+      if (typeof prefillFromCase === "function") prefillFromCase(caseId);
+    }
+    // Scroll demand form into view
+    document.getElementById("demand-content")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 120);
 }
 
 function saveCaseEdit(event, caseId) {

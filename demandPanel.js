@@ -258,21 +258,59 @@ function prefillFromCase(caseId) {
   const c = cases.find(x => x.id === caseId);
   if (!c) return;
 
-  _setDemandField("client_name", c.clientName || "");
-  _setDemandField("email_demand", c.email || "");
-  _setDemandField("date_of_loss", c.dateOfIncident || "");
+  // Helper: camelCase or snake_case field lookup
+  const get = (...keys) => { for (const k of keys) { if (c[k]) return c[k]; } return ""; };
 
+  // ── Client ──────────────────────────────────────────────────────
+  _setDemandField("client_name",           get("clientName", "client_name"));
+  _setDemandField("date_of_loss",          get("dateOfIncident", "date_of_incident", "dateOfLoss", "date_of_loss"));
+  _setDemandField("client_coverage_insurer", get("clientInsuranceCompany", "client_insurance_company"));
+
+  // ── Opposing insurance ───────────────────────────────────────────
+  _setDemandField("insured_name",     get("insuredName", "insured_name"));
+  _setDemandField("insurance_company", get("insuranceCompany", "insurance_company"));
+  _setDemandField("adjuster_name",    get("adjusterName", "adjuster_name"));
+  _setDemandField("claim_number",     get("claimNumber", "claim_number"));
+
+  // email_demand = TO address (adjuster email — where the demand gets sent)
+  _setDemandField("email_demand", get("adjusterEmail", "adjuster_email"));
+  // email_to = adjuster contact shown in the letter body
+  _setDemandField("email_to",     get("adjusterEmail", "adjuster_email", "adjusterFax", "adjuster_fax"));
+
+  // UM/UIM: pre-fill client insurer as coverage_insurer
+  _setDemandField("coverage_insurer", get("clientInsuranceCompany", "client_insurance_company"));
+
+  // ── Case context banner ──────────────────────────────────────────
+  const adjEmail = get("adjusterEmail", "adjuster_email");
+  const claimNum = get("claimNumber", "claim_number");
+  const insurer  = get("insuranceCompany", "insurance_company");
   const ctx = document.getElementById("demand-case-context");
   if (ctx) {
     ctx.innerHTML = `
       <div style="background:var(--bg-card);padding:12px;border-radius:6px;margin-bottom:12px;border-left:3px solid var(--accent)">
-        <div style="font-weight:600;font-size:13px">${escapeHtml(c.clientName)} &mdash; ${escapeHtml(c.caseType)}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${escapeHtml((c.description || "").slice(0, 200))}</div>
-        ${c.estimatedValue ? `<div style="font-size:12px;color:var(--success);margin-top:4px">Estimated: ${escapeHtml(c.estimatedValue)}</div>` : ""}
+        <div style="font-weight:600;font-size:13px;margin-bottom:6px">${escapeHtml(c.clientName || "")} — ${escapeHtml(c.caseType || "")}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--text-muted)">
+          ${insurer  ? `<span>🏢 ${escapeHtml(insurer)}</span>` : ""}
+          ${claimNum ? `<span>📋 Claim: ${escapeHtml(claimNum)}</span>` : ""}
+          ${adjEmail ? `<span>📧 ${escapeHtml(adjEmail)}</span>` : ""}
+          ${c.dateOfIncident ? `<span>📅 DOL: ${escapeHtml(c.dateOfIncident)}</span>` : ""}
+          ${c.estimatedValue || c.caseValueRange ? `<span style="color:var(--success)">💰 ${escapeHtml(c.estimatedValue || c.caseValueRange)}</span>` : ""}
+        </div>
+        ${(c.description || "").trim() ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;border-top:1px solid var(--border);padding-top:6px">${escapeHtml(c.description.slice(0, 200))}${c.description.length > 200 ? "…" : ""}</div>` : ""}
       </div>
     `;
   }
-  showToast("Pre-filled from case: " + c.clientName);
+
+  const filled = [
+    get("adjusterEmail","adjuster_email") && "adjuster email",
+    insurer && "insurer",
+    claimNum && "claim #",
+    get("adjusterName","adjuster_name") && "adjuster name",
+    get("insuredName","insured_name") && "insured name",
+    get("clientInsuranceCompany","client_insurance_company") && "client insurer",
+  ].filter(Boolean);
+
+  showToast(`Pre-filled from ${c.clientName}${filled.length ? ": " + filled.join(", ") : ""}`);
 }
 
 function _setDemandField(name, value) {
