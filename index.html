@@ -278,6 +278,33 @@
             <button class="btn btn-outline btn-sm" onclick="exportCases()">Export Cases (JSON)</button>
             <button class="btn btn-danger btn-sm" style="margin-left:8px" onclick="resetCrmData()">Reset to Demo Data</button>
           </div>
+
+          <div class="settings-section">
+            <h3>📠 Twilio Fax</h3>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+              Credentials are saved on the server (persist across restarts). Find these in
+              <a href="https://console.twilio.com" target="_blank" style="color:var(--accent)">console.twilio.com</a>
+              → Account → API keys &amp; tokens.
+            </p>
+            <div id="twilio-status-banner" style="margin-bottom:12px"></div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Account SID <span style="color:var(--text-muted);font-weight:400">(starts with AC)</span></label>
+                <input type="password" id="twilio-account-sid" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label>Auth Token</label>
+                <input type="password" id="twilio-auth-token" placeholder="your auth token" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label>Fax From Number <span style="color:var(--text-muted);font-weight:400">(digits only)</span></label>
+                <input type="text" id="twilio-fax-from" placeholder="4804280815" />
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="_saveTwilioCredentials()">Save Twilio Credentials</button>
+          </div>
+
+        </div>
         </div>
       </main>
     </div>
@@ -295,7 +322,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.27.0/lib/msal-browser.min.js"></script>
   <script src="auth.js"></script>
   <script src="graphClient.js"></script>
-  <script src="crmData.js?v=20260401"></script>
+  <script src="crmData.js?v=20260409"></script>
   <script src="agentTasks.js?v=20260401"></script>
   <script src="demandPanel.js?v=20260401"></script>
   <script src="calendarPanel.js?v=20260401"></script>
@@ -405,6 +432,35 @@
         if (statusEl) statusEl.textContent = "Not connected";
         if (statusEl) statusEl.style.color = "var(--text-muted)";
         if (accountEl) accountEl.textContent = "—";
+      }
+
+      // Check Twilio status
+      const twilioEl = document.getElementById("twilio-status-banner");
+      if (twilioEl) {
+        fetch("/api/twilio/status").then(r => r.json()).then(d => {
+          twilioEl.innerHTML = d.configured
+            ? `<div style="background:#22c55e22;border:1px solid #22c55e;padding:8px 12px;border-radius:6px;font-size:13px;color:#22c55e">✓ Twilio credentials configured</div>`
+            : `<div style="background:var(--bg-card);border:1px solid var(--border);padding:8px 12px;border-radius:6px;font-size:13px;color:var(--text-muted)">Twilio not configured — fax sending disabled</div>`;
+        }).catch(() => {});
+      }
+    }
+
+    async function _saveTwilioCredentials() {
+      const sid  = document.getElementById("twilio-account-sid")?.value?.trim();
+      const tok  = document.getElementById("twilio-auth-token")?.value?.trim();
+      const from = document.getElementById("twilio-fax-from")?.value?.trim();
+      if (!sid || !tok) { showToast("Account SID and Auth Token are required", "error"); return; }
+      try {
+        const resp = await fetch("/api/twilio/set-credentials", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_sid: sid, auth_token: tok, fax_from: from }),
+        });
+        if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || `HTTP ${resp.status}`); }
+        showToast("Twilio credentials saved", "success");
+        updateSettingsPanel();
+      } catch (err) {
+        showToast("Save failed: " + err.message, "error");
       }
     }
 
