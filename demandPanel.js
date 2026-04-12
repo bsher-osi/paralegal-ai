@@ -183,7 +183,7 @@ function renderDemandPanel() {
 
       <div style="margin-top:16px">
         <button type="submit" class="btn btn-primary" id="demand-submit-btn" style="width:100%;padding:12px;font-size:15px">
-          Generate & Email Demand Letter
+          Generate Demand Letter
         </button>
       </div>
     </form>
@@ -320,6 +320,9 @@ function _setDemandField(name, value) {
 
 // ─── Submission ───────────────────────────────────────────────────
 
+// Track the case linked to the current demand generation
+let _demandCaseId = "";
+
 async function submitDemand(event) {
   event.preventDefault();
   const form = document.getElementById("demand-form");
@@ -333,9 +336,14 @@ async function submitDemand(event) {
   }
 
   btn.disabled = true;
-  btn.textContent = "Submitting...";
+  btn.textContent = "Generating...";
 
   const formData = new FormData(form);
+
+  // Capture and inject case_id from the pre-fill dropdown
+  const caseSelect = document.getElementById("demand-case-select");
+  _demandCaseId = (caseSelect && caseSelect.value) ? caseSelect.value : "";
+  if (_demandCaseId) formData.set("case_id", _demandCaseId);
 
   try {
     const resp = await fetch(`${DEMANDS_API_BASE}/api/submit`, {
@@ -345,13 +353,13 @@ async function submitDemand(event) {
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-    showToast("Demand queued!");
+    showToast("Demand queued — generating document...");
     showDemandProgress(data.job_id);
   } catch (err) {
     showToast("Submission failed: " + err.message, "error");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Generate & Email Demand Letter";
+    btn.textContent = "Generate Demand Letter";
   }
 }
 
@@ -393,17 +401,8 @@ function showDemandProgress(jobId) {
       } else if (data.status === "finished") {
         clearInterval(poll);
         const r = data.result || {};
-        area.innerHTML = `
-          <div class="demand-progress" style="border-left:3px solid var(--success)">
-            <div style="font-weight:600;color:var(--success)">Demand letter generated and emailed!</div>
-            <div style="font-size:13px;color:var(--text-secondary);margin-top:6px">
-              Sent to <strong>${escapeHtml(String(r.to || "recipient"))}</strong>
-              for ${escapeHtml(r.client_name || "")}
-              (Claim ${escapeHtml(r.claim_number || "")})
-            </div>
-          </div>
-        `;
-        showToast("Demand letter generated and emailed!");
+        showDemandPreview(r);
+        showToast("Demand letter ready for review");
       } else if (data.status === "failed") {
         clearInterval(poll);
         area.innerHTML = `<div class="agent-error"><strong>Generation failed:</strong> ${escapeHtml(data.error || "Unknown error")}</div>`;
@@ -415,4 +414,278 @@ function showDemandProgress(jobId) {
   }, 3000);
 
   setTimeout(() => clearInterval(poll), 600000);
+}
+
+function showDemandPreview(r) {
+  const area = document.getElementById("demand-progress-area");
+  if (!area) return;
+
+  const filename   = r.filename || "";
+  const emailTo    = r.email_to || "";
+  const clientName = r.client_name || "";
+  const claimNum   = r.claim_number || "";
+  const insurer    = r.insurer || "";
+  const caseId     = r.case_id || _demandCaseId || "";
+  const downloadUrl = `/api/case-documents/download/${encodeURIComponent(filename)}`;
+
+  area.innerHTML = `
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg-card);max-width:560px">
+
+      <!-- Header -->
+      <div style="background:var(--bg-hover);padding:14px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)">
+        <span style="font-size:26px">📄</span>
+        <div>
+          <div style="font-weight:700;font-size:15px">Demand Letter Generated</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${escapeHtml(clientName)}${claimNum ? ` · Claim ${escapeHtml(claimNum)}` : ""}${insurer ? ` · ${escapeHtml(insurer)}` : ""}</div>
+        </div>
+      </div>
+
+      <!-- Step 1 -->
+      <div style="padding:16px 18px;border-bottom:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Step 1 — Download &amp; Review</div>
+        <a href="${downloadUrl}" download
+           style="display:inline-flex;align-items:center;gap:8px;text-decoration:none;background:var(--slg-orange);color:#000;font-weight:700;font-size:14px;padding:10px 22px;border-radius:7px">
+          ⬇ Download DOCX
+        </a>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">Open in Word, review and make any edits, then save.</div>
+      </div>
+
+      <!-- Step 2 -->
+      <div style="padding:16px 18px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Step 2 — Upload Final &amp; Send</div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Send to (email)</label>
+          <input id="demand-email-to" type="email" value="${escapeHtml(emailTo)}"
+                 placeholder="adjuster@insurance.com"
+                 style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-input,var(--bg-hover));color:var(--text-primary);font-size:13px;box-sizing:border-box">
+        </div>
+        <button id="demand-upload-send-btn"
+                style="display:inline-flex;align-items:center;gap:8px;background:#6366f1;color:#fff;font-weight:700;font-size:14px;padding:10px 22px;border-radius:7px;border:none;cursor:pointer">
+          ⬆ Upload Edited File &amp; Send
+        </button>
+      </div>
+
+    </div>
+  `;
+
+  document.getElementById("demand-upload-send-btn").addEventListener("click", () => {
+    const email = document.getElementById("demand-email-to")?.value?.trim() || emailTo;
+    uploadFinalDemand({ emailTo: email, clientName, claimNum, caseId });
+  });
+}
+
+/**
+ * Prompt user to pick their edited file, upload it, email it, and move the case.
+ */
+function uploadFinalDemand(d) {
+  if (!d.emailTo) {
+    showToast("Please enter an email address first", "error");
+    document.getElementById("demand-email-to")?.focus();
+    return;
+  }
+
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".pdf,.docx";
+  input.style.display = "none";
+  document.body.appendChild(input);
+
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    document.body.removeChild(input);
+    if (!file) return;
+
+    const btn = document.getElementById("demand-upload-send-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Uploading..."; }
+
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+
+    try {
+      // 1. Upload the edited file (stores in UPLOAD_DIR + case_documents)
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("caseId", d.caseId || "");
+      fd.append("title", `Demand Letter – ${d.clientName || "Client"}`);
+
+      const upResp = await fetch("/api/case-documents/upload", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      });
+      if (!upResp.ok) throw new Error(`Upload failed: ${upResp.status}`);
+      const upData = await upResp.json();
+
+      if (btn) btn.textContent = "Sending email...";
+
+      // 2. Email the file
+      const sendResp = await fetch(`${DEMANDS_API_BASE}/api/demand/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          filename:    upData.filename,
+          emailTo:     d.emailTo,
+          clientName:  d.clientName,
+          claimNumber: d.claimNum,
+          caseId:      d.caseId,
+        }),
+      });
+      if (!sendResp.ok) { const e = await sendResp.json(); throw new Error(e.error || `HTTP ${sendResp.status}`); }
+
+      // 3. Upload to OneDrive/SharePoint
+      if (btn) btn.textContent = "Saving to OneDrive...";
+      await _uploadDemandToOneDrive(file, d.clientName).catch(err =>
+        console.warn("[demand] OneDrive upload skipped:", err.message)
+      );
+
+      // 4. Move case to settlement_dist
+      if (d.caseId && typeof moveCaseToStage === "function") {
+        moveCaseToStage(d.caseId, "settlement_dist");
+        if (typeof renderKanbanBoard === "function") renderKanbanBoard();
+      }
+
+      // 5. Show success
+      const area = document.getElementById("demand-progress-area");
+      if (area) {
+        area.innerHTML = `
+          <div style="border-left:4px solid var(--success);border-radius:8px;padding:16px 18px;background:var(--bg-card);max-width:560px">
+            <div style="font-weight:700;color:var(--success);font-size:15px;margin-bottom:6px">✅ Demand letter sent!</div>
+            <div style="font-size:13px;color:var(--text-secondary)">
+              Emailed to <strong>${escapeHtml(d.emailTo)}</strong>
+              ${d.clientName ? ` for <strong>${escapeHtml(d.clientName)}</strong>` : ""}
+              ${d.claimNum   ? ` · Claim ${escapeHtml(d.claimNum)}` : ""}
+            </div>
+            ${d.caseId ? `<div style="margin-top:8px;font-size:12px;color:var(--text-muted)">Case moved to <strong>Settlement Distribution</strong> · Saved to OneDrive</div>` : ""}
+          </div>
+        `;
+      }
+      showToast(`Demand sent to ${d.emailTo}!`, "success");
+      // Navigate back to the case board
+      setTimeout(() => { if (typeof switchPanel === "function") switchPanel("crm"); }, 1500);
+
+    } catch (err) {
+      showToast("Failed: " + err.message, "error");
+      if (btn) { btn.disabled = false; btn.textContent = "⬆ Upload Edited File & Send"; }
+    }
+  });
+
+  input.click();
+}
+
+/**
+ * Upload the demand letter file to OneDrive.
+ * Uses uploadFileToDrive (personal OneDrive root) which works without
+ * pre-existing folder structure. Falls back gracefully if unavailable.
+ */
+async function _uploadDemandToOneDrive(file, clientName) {
+  const arrayBuffer = await file.arrayBuffer();
+
+  // Preferred: uploadFileToDrive from graphClient.js (simple, reliable)
+  if (typeof uploadFileToDrive === "function") {
+    await uploadFileToDrive(file.name, arrayBuffer);
+    console.log("[demand] Uploaded to OneDrive:", file.name);
+    return;
+  }
+
+  // Fallback: SharePoint path via getSpDrive (requires folders to exist)
+  if (typeof getSpDrive !== "function" || typeof getAccessToken !== "function") {
+    throw new Error("No OneDrive upload function available");
+  }
+  const spd = await getSpDrive();
+  const safeClient = (clientName || "Unknown").replace(/[/\\:*?"<>|]/g, "_").trim();
+  const token = await getAccessToken();
+  const uploadUrl = `https://graph.microsoft.com/v1.0${spd}/root:/Demands/${encodeURIComponent(safeClient)}/${encodeURIComponent(file.name)}:/content`;
+  const resp = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream" },
+    body: arrayBuffer,
+  });
+  if (!resp.ok) throw new Error(`OneDrive PUT ${resp.status}`);
+  console.log("[demand] Uploaded to SharePoint:", uploadUrl);
+}
+
+/**
+ * Show a "ready to send" card for a file that's already uploaded (from uploadDemandLetter).
+ * Just needs to email + move stage — no re-upload step.
+ */
+function showUploadedReadyToSend(d) {
+  const area = document.getElementById("demand-progress-area");
+  if (!area) return;
+
+  area.innerHTML = `
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg-card);max-width:560px">
+      <div style="background:var(--bg-hover);padding:14px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)">
+        <span style="font-size:26px">📄</span>
+        <div>
+          <div style="font-weight:700;font-size:15px">Demand Letter Uploaded</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${escapeHtml(d.clientName || "")}${d.claimNum ? ` · Claim ${escapeHtml(d.claimNum)}` : ""}${d.insurer ? ` · ${escapeHtml(d.insurer)}` : ""}</div>
+        </div>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="margin-bottom:12px">
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Send to (email)</label>
+          <input id="demand-email-to" type="email" value="${escapeHtml(d.emailTo || "")}"
+                 placeholder="adjuster@insurance.com"
+                 style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-input,var(--bg-hover));color:var(--text-primary);font-size:13px;box-sizing:border-box">
+        </div>
+        <button id="demand-upload-send-btn"
+                style="display:inline-flex;align-items:center;gap:8px;background:#6366f1;color:#fff;font-weight:700;font-size:14px;padding:10px 22px;border-radius:7px;border:none;cursor:pointer">
+          ✅ Send Demand Letter
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("demand-upload-send-btn").addEventListener("click", async () => {
+    const emailTo = document.getElementById("demand-email-to")?.value?.trim() || d.emailTo;
+    if (!emailTo) { showToast("Please enter an email address", "error"); return; }
+
+    const btn = document.getElementById("demand-upload-send-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Sending..."; }
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+    try {
+      const sendResp = await fetch(`${DEMANDS_API_BASE}/api/demand/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ filename: d.filename, emailTo, clientName: d.clientName, claimNumber: d.claimNum, caseId: d.caseId }),
+      });
+      if (!sendResp.ok) { const e = await sendResp.json(); throw new Error(e.error || `HTTP ${sendResp.status}`); }
+
+      // Upload to OneDrive
+      if (btn) btn.textContent = "Saving to OneDrive...";
+      if (d.filename) {
+        // Fetch the file from server and push to OneDrive
+        const fileResp = await fetch(`/api/case-documents/download/${encodeURIComponent(d.filename)}`);
+        if (fileResp.ok) {
+          const blob = await fileResp.blob();
+          const file = new File([blob], d.filename, { type: blob.type });
+          await _uploadDemandToOneDrive(file, d.clientName).catch(err =>
+            console.warn("[demand] OneDrive upload skipped:", err.message)
+          );
+        }
+      }
+
+      if (d.caseId && typeof moveCaseToStage === "function") {
+        moveCaseToStage(d.caseId, "settlement_dist");
+        if (typeof renderKanbanBoard === "function") renderKanbanBoard();
+      }
+
+      area.innerHTML = `
+        <div style="border-left:4px solid var(--success);border-radius:8px;padding:16px 18px;background:var(--bg-card);max-width:560px">
+          <div style="font-weight:700;color:var(--success);font-size:15px;margin-bottom:6px">✅ Demand letter sent!</div>
+          <div style="font-size:13px;color:var(--text-secondary)">
+            Emailed to <strong>${escapeHtml(emailTo)}</strong>
+            ${d.clientName ? ` for <strong>${escapeHtml(d.clientName)}</strong>` : ""}
+            ${d.claimNum ? ` · Claim ${escapeHtml(d.claimNum)}` : ""}
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">Case moved to <strong>Settlement Distribution</strong> · Saved to OneDrive</div>
+        </div>
+      `;
+      showToast(`Demand sent to ${emailTo}!`, "success");
+      // Navigate back to the case board
+      setTimeout(() => { if (typeof switchPanel === "function") switchPanel("crm"); }, 1500);
+    } catch (err) {
+      showToast("Send failed: " + err.message, "error");
+      if (btn) { btn.disabled = false; btn.textContent = "✅ Send Demand Letter"; }
+    }
+  });
 }

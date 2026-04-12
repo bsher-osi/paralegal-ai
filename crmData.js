@@ -289,8 +289,8 @@ function renderKanbanBoard() {
               <div class="kanban-card-name">${escapeHtml(c.clientName||"")}</div>
               ${c.statuteOfLimitations ? `<div class="kanban-card-sol">SOL ${new Date(c.statuteOfLimitations+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div>` : ""}
               <div class="kanban-card-actions" onclick="event.stopPropagation()">
-                <button title="Send Fax" onclick="openFaxForCase('${c.id}')"
-                  style="background:none;border:none;cursor:pointer;font-size:15px;padding:2px 4px;opacity:.7;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">📠</button>
+                ${c.stage !== "demand_prep" ? `<button title="Send Fax" onclick="openFaxForCase('${c.id}')"
+                  style="background:none;border:none;cursor:pointer;font-size:15px;padding:2px 4px;opacity:.7;line-height:1" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">📠</button>` : ""}
               </div>
             </div>`).join("")}
         </div>
@@ -458,15 +458,19 @@ function openCaseDetail(caseId) {
       </div>
       <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
         <button type="submit" class="btn btn-primary">Save Changes</button>
-        <button type="button" class="btn btn-outline" onclick="openFaxForCase('${c.id}')" style="font-size:13px">📠 Send Fax</button>
+        ${c.stage !== "demand_prep" ? `<button type="button" class="btn btn-outline" onclick="openFaxForCase('${c.id}')" style="font-size:13px">📠 Send Fax</button>` : ""}
         ${c.stage === "intake" ? `<button type="button" class="btn btn-accent" style="background:#a855f7" onclick="showFeeAgreementPreview('${c.id}')">Send Fee Agreement</button>` : ""}
         ${c.stage === "fee_agreement_sent" ? `<button type="button" class="btn btn-accent" style="background:#22c55e" onclick="markAgreementSigned('${c.id}')">Agreement Signed</button>` : ""}
         ${c.stage === "fee_agreement_sent" && c.docusignEnvelopeId ? `<button type="button" class="btn btn-outline" onclick="checkAgreementStatus('${c.id}')">Check Signature</button>` : ""}
         ${c.stage === "fee_agreement_signed" ? `<button type="button" class="btn btn-accent" style="background:#6d28d9" onclick="moveCaseToStage('${c.id}','open_claims');renderKanbanBoard();closeCaseModal();showToast('Moved to Open Claim')">Open Claim</button>` : ""}
         ${c.stage === "open_claims" ? `<button type="button" class="btn btn-accent" style="background:var(--slg-orange)" onclick="sendLORs('${c.id}')">📨 Send LORs</button>` : ""}
-        ${c.stage === "demand_prep" ? `<button type="button" class="btn btn-accent" style="background:#f59e0b;color:#000" onclick="openDemandForCase('${c.id}')">📄 Create Demand</button>` : ""}
+        ${c.stage === "demand_prep" ? `
+          <button type="button" class="btn btn-accent" style="background:#f59e0b;color:#000" onclick="openDemandForCase('${c.id}')">📄 Create Demand</button>
+          <button type="button" class="btn btn-accent" style="background:#6366f1" onclick="uploadDemandLetter('${c.id}')">⬆ Upload Demand</button>
+        ` : ""}
         ${c.stage === "client_treating" ? `<button type="button" class="btn btn-accent" style="background:#14b8a6" onclick="moveCaseToStage('${c.id}','lien_search');renderKanbanBoard();closeCaseModal();showToast('Moved to Lien Search')">✅ Done Treating</button>` : ""}
         ${c.stage === "lien_search" ? `<button type="button" class="btn btn-accent" style="background:#3b82f6" onclick="moveCaseToStage('${c.id}','collecting_records');renderKanbanBoard();closeCaseModal();showToast('Moved to Collecting Records')">📋 Collect Records</button>` : ""}
+        ${c.stage === "collecting_records" ? `<button type="button" class="btn btn-accent" style="background:#f59e0b;color:#000" onclick="moveCaseToStage('${c.id}','demand_prep');renderKanbanBoard();closeCaseModal();showToast('Moved to Demand Prep')">📄 Ready to Demand</button>` : ""}
         ${c.stage === "negotiations" ? `
           <button type="button" class="btn btn-accent" style="background:#22c55e" onclick="moveCaseToStage('${c.id}','send_acceptance');renderKanbanBoard();closeCaseModal();showToast('Case Settled — moved to Send Acceptance')">✅ Case Settled</button>
           <button type="button" class="btn btn-accent" style="background:#ef4444" onclick="moveCaseToStage('${c.id}','litigation_filed');_activeBoardTab='litigation';renderKanbanBoard();closeCaseModal();showToast('Moved to Litigation')">⚖️ Move to Litigation</button>
@@ -501,6 +505,68 @@ function openDemandForCase(caseId) {
     // Scroll demand form into view
     document.getElementById("demand-content")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, 120);
+}
+
+/**
+ * Upload a pre-made demand letter PDF/DOCX and show the approve/send preview.
+ */
+function uploadDemandLetter(caseId) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".pdf,.docx";
+  input.style.display = "none";
+  document.body.appendChild(input);
+
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    document.body.removeChild(input);
+    if (!file) return;
+
+    const cases = loadCases();
+    const c = cases.find(x => x.id === caseId) || {};
+
+    showToast("Uploading...");
+    try {
+      const token = typeof getIdToken === "function" ? await getIdToken() : null;
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("title", `Demand Letter – ${c.clientName || "Client"}`);
+      fd.append("caseId", caseId);
+
+      const resp = await fetch("/api/case-documents/upload", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      });
+      if (!resp.ok) throw new Error(`Upload failed: ${resp.status}`);
+      const data = await resp.json();
+
+      showToast("Uploaded — ready to send");
+
+      // Close modal, switch to demand panel, show "ready to send" card
+      closeCaseModal();
+      if (typeof switchPanel === "function") switchPanel("demand");
+      setTimeout(() => {
+        if (typeof renderDemandPanel === "function") renderDemandPanel();
+        // Show a "ready to send" card (file already uploaded — just needs email)
+        const area = document.getElementById("demand-progress-area");
+        if (area) {
+          showUploadedReadyToSend({
+            filename:    data.filename,
+            emailTo:     c.adjusterEmail || "",
+            clientName:  c.clientName || "",
+            claimNum:    c.claimNumber || "",
+            insurer:     c.insuranceCompany || "",
+            caseId,
+          });
+        }
+      }, 150);
+    } catch (err) {
+      showToast("Upload failed: " + err.message, "error");
+    }
+  });
+
+  input.click();
 }
 
 function saveCaseEdit(event, caseId) {

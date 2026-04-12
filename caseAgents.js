@@ -597,7 +597,6 @@ const STAGE_HANDLERS = {
   fee_agreement_sent: handleFeeAgreementSent,
   fee_agreement_signed: handleAgreementSigned,
   lor_sent: handleLorSent,
-  demand_sent: handleDemandSent,
   litigation_filed: handleLitigationFiled,
   litigation_served: handleLitigationServed,
   litigation_answered: handleLitigationAnswered,
