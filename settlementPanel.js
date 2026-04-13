@@ -600,7 +600,7 @@ async function _generateSDS() {
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:8px">
           <div style="font-weight:700;margin-bottom:12px;color:var(--text-primary)">Document Generated</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <a href="/api/download/${encodeURIComponent(filename)}" target="_blank" class="btn btn-outline">
+            <a href="/api/case-documents/download/${encodeURIComponent(filename)}" target="_blank" class="btn btn-outline">
               Download DOCX
             </a>
             <button type="button" class="btn btn-primary" style="background:#6366f1"
