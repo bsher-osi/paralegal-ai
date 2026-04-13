@@ -1,385 +1,671 @@
-// ─── Settlement Distribution Sheet Panel ─────────────────────────────
-// Calculates attorney fees, medical lien totals, and net-to-client
+// â”€â”€â”€ Settlement Distribution Sheet Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Full SDS form: generates a signed DOCX via DocuSign anchor tabs
 
-const SETTLEMENT_API = "";
+function _sdsVal(id) {
+  return parseFloat(document.getElementById(id)?.value) || 0;
+}
 
-function _fmtS(n) { return (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function _fmtS(n) {
+  return (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function renderSettlementPanel() {
   const container = document.getElementById("settlement-content");
   if (!container) return;
   const cases = typeof loadCases === "function" ? loadCases() : [];
 
+  // Build attorney options from FIRM_ATTORNEYS (defined in demandPanel.js)
+  let attorneyOptHtml = `<option value="">-- Select Attorney --</option>`;
+  if (typeof FIRM_ATTORNEYS === "object") {
+    for (const [firm, attorneys] of Object.entries(FIRM_ATTORNEYS)) {
+      attorneyOptHtml += `<optgroup label="${escapeHtml(firm)}">`;
+      for (const atty of attorneys) {
+        attorneyOptHtml += `<option value="${escapeHtml(atty.name)}">${escapeHtml(atty.name)}</option>`;
+      }
+      attorneyOptHtml += `</optgroup>`;
+    }
+  }
+
   container.innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
-      <select id="stl-case-select" onchange="_onSettlementCaseChange()" style="padding:6px 10px;border-radius:6px;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);min-width:220px">
-        <option value="">-- Select Case --</option>
-        ${cases.map(c => `<option value="${c.id}" data-settlement="${c.settlementAmount || ""}">${escapeHtml(c.clientName)}</option>`).join("")}
+    <!-- Case Selector -->
+    <div class="form-group" style="margin-bottom:20px">
+      <label>Select Case</label>
+      <select id="sds-case-select" onchange="prefillSettlementFromCase(this.value)"
+        style="padding:8px 12px;border-radius:6px;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);min-width:260px;width:100%">
+        <option value="">-- Select a Case --</option>
+        ${cases.map(c => `<option value="${c.id}">${escapeHtml(c.clientName || "")}${c.claimNumber ? " â€” " + escapeHtml(c.claimNumber) : ""}</option>`).join("")}
       </select>
     </div>
 
-    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
-      <div class="form-group" style="flex:1;min-width:180px">
-        <label>Settlement Amount ($)</label>
-        <input type="number" id="stl-amount" step="0.01" value="0" oninput="_recalcSettlement()" style="font-size:16px;padding:8px">
+    <!-- Settlement Amount -->
+    <div class="demand-section-title">I. Settlement Amount</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div class="form-group" style="flex:1;min-width:200px">
+        <label>Total Settlement Amount ($) *</label>
+        <input type="number" id="sds-settlement-amount" step="0.01" min="0" placeholder="0.00"
+          oninput="_recalcSDS()" style="font-size:16px;padding:8px">
       </div>
+      <div class="form-group" style="flex:2;min-width:260px">
+        <label>Breakdown Description (e.g. "$12,861.49 liability + $5,300 Med-Pay")</label>
+        <input type="text" id="sds-settlement-breakdown" placeholder="Optional breakdown description"
+          oninput="_recalcSDS()">
+      </div>
+    </div>
+
+    <!-- Attorney Fees -->
+    <div class="demand-section-title">D. Attorney Fees</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
       <div class="form-group" style="flex:1;min-width:220px">
-        <label>Fee Structure</label>
-        <div style="display:flex;gap:12px;padding-top:6px">
-          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text-primary)">
-            <input type="radio" name="stl-fee-type" value="0.333" checked onchange="_recalcSettlement()"> Pre-Litigation (33.3%)
+        <label>Fee Percentage</label>
+        <div style="display:flex;gap:16px;padding-top:6px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-primary)">
+            <input type="radio" name="sds-fee-pct" value="0.333" checked onchange="_recalcSDS()">
+            Pre-Litigation (33.3%)
           </label>
-          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text-primary)">
-            <input type="radio" name="stl-fee-type" value="0.40" onchange="_recalcSettlement()"> Litigation (40%)
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-primary)">
+            <input type="radio" name="sds-fee-pct" value="0.40" onchange="_recalcSDS()">
+            Litigation (40%)
           </label>
         </div>
+        <div style="margin-top:6px;font-size:13px;color:var(--text-muted)">
+          Calculated fee: <span id="sds-fee-calc-label" style="color:var(--text-primary);font-weight:600">$0.00</span>
+        </div>
       </div>
-      <div class="form-group" style="flex:1;min-width:180px">
-        <label>Legal Costs ($)</label>
-        <input type="number" id="stl-costs" step="0.01" value="0" oninput="_recalcSettlement()" style="font-size:16px;padding:8px">
+      <div class="form-group" style="flex:1;min-width:200px">
+        <label>Override Amount ($) <span style="font-size:11px;color:var(--text-muted)">(leave blank to use %)</span></label>
+        <input type="number" id="sds-fee-override" step="0.01" min="0" placeholder="e.g. 5250.00"
+          oninput="_recalcSDS()">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">If filled, this overrides the percentage.</div>
+      </div>
+      <div class="form-group" style="flex:1;min-width:240px">
+        <label>Original Fee Amount (before reduction) ($)</label>
+        <input type="number" id="sds-fee-original" step="0.01" min="0" placeholder="e.g. 6053.83"
+          oninput="_recalcSDS()">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">Used in document: "Reduced from $X"</div>
       </div>
     </div>
 
-    <div id="stl-provider-table"><p style="color:var(--text-muted)">Select a case to load providers.</p></div>
+    <!-- Legal Costs -->
+    <div class="demand-section-title">C. Legal Costs</div>
+    <div class="form-group" style="max-width:300px">
+      <label>Legal Costs ($)</label>
+      <input type="number" id="sds-legal-costs" step="0.01" min="0" placeholder="0.00" oninput="_recalcSDS()">
+    </div>
 
-    <div id="stl-summary-card"></div>
+    <!-- Medical Bills -->
+    <div class="demand-section-title">A. Medical Bills</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <button type="button" class="btn btn-outline" onclick="_sdsAddMedRow()">+ Add Provider</button>
+      <button type="button" class="btn btn-outline" id="sds-load-specials-btn"
+        onclick="_loadSpecialsIntoMedBills(document.getElementById('sds-case-select')?.value)">
+        Load from Specials
+      </button>
+    </div>
+    <div style="overflow-x:auto">
+      <table id="sds-med-table" style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
+            <th style="text-align:left;padding:6px 8px;width:40%">Provider</th>
+            <th style="text-align:right;padding:6px 8px;width:20%">Original Amount ($)</th>
+            <th style="text-align:right;padding:6px 8px;width:20%">Final / Negotiated ($)</th>
+            <th style="padding:6px 8px;width:20%;text-align:center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sds-med-tbody">
+          <!-- rows injected by _sdsAddMedRow() -->
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);font-weight:700">
+            <td style="padding:6px 8px">Total Medical Bills</td>
+            <td style="text-align:right;padding:6px 8px" id="sds-med-orig-total">$0.00</td>
+            <td style="text-align:right;padding:6px 8px" id="sds-med-final-total">$0.00</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
 
-    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" onclick="_saveDistribution()">Save Distribution</button>
-      <button class="btn btn-outline btn-sm" onclick="_exportSettlementCSV()">Export CSV</button>
-      <button class="btn btn-outline btn-sm" onclick="_saveSettlementToCase()">Save to Case</button>
+    <!-- Health Insurance Reimbursement -->
+    <div class="demand-section-title">B. Health Insurance Reimbursement</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button type="button" class="btn btn-outline" onclick="_sdsAddHiRow()">+ Add Insurer</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table id="sds-hi-table" style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
+            <th style="text-align:left;padding:6px 8px;width:60%">Insurer Name</th>
+            <th style="text-align:right;padding:6px 8px;width:20%">Amount ($)</th>
+            <th style="padding:6px 8px;width:20%;text-align:center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sds-hi-tbody">
+          <!-- rows injected -->
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);font-weight:700">
+            <td style="padding:6px 8px">Total Health Insurance</td>
+            <td style="text-align:right;padding:6px 8px" id="sds-hi-total">$0.00</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- Med-Pay -->
+    <div class="demand-section-title">IV. Med-Pay Proceeds</div>
+    <div class="form-group" style="max-width:300px">
+      <label>Med-Pay Proceeds to Client ($)</label>
+      <input type="number" id="sds-medpay" step="0.01" min="0" placeholder="0.00" value="0" oninput="_recalcSDS()">
+    </div>
+
+    <!-- Document Details -->
+    <div class="demand-section-title">Document Details</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div class="form-group" style="flex:1;min-width:180px">
+        <label>Client Name *</label>
+        <input type="text" id="sds-client-name" placeholder="GLENETTA HAYWARD" oninput="_recalcSDS()">
+      </div>
+      <div class="form-group" style="flex:1;min-width:160px">
+        <label>Date of Loss *</label>
+        <input type="text" id="sds-date-of-loss" placeholder="5/10/25" oninput="_recalcSDS()">
+      </div>
+      <div class="form-group" style="flex:1;min-width:260px">
+        <label>Attorney</label>
+        <select id="sds-attorney" oninput="_recalcSDS()">${attorneyOptHtml}</select>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div class="form-group" style="flex:2;min-width:240px">
+        <label>Client Email (for DocuSign) *</label>
+        <input type="email" id="sds-client-email" placeholder="client@example.com">
+      </div>
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="sds-is-lawsuit" onchange="_sdsToggleLawsuit()">
+        <span>Is Lawsuit Filed?</span>
+      </label>
+    </div>
+    <div id="sds-lawsuit-fields" style="display:none;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);margin-bottom:12px">
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:180px">
+          <label>County</label>
+          <input type="text" id="sds-county" placeholder="Maricopa">
+        </div>
+        <div class="form-group" style="flex:2;min-width:220px">
+          <label>Case Number</label>
+          <input type="text" id="sds-case-number" placeholder="CV2025-029108">
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Summary Card -->
+    <div id="sds-summary-card" style="margin-top:24px"></div>
+
+    <!-- Result Area -->
+    <div id="sds-result-area" style="margin-top:16px"></div>
+
+    <!-- Generate Button -->
+    <div style="margin-top:20px">
+      <button type="button" class="btn btn-primary" style="width:100%;background:#6366f1;font-size:15px;padding:12px"
+        onclick="_generateSDS()">
+        Generate Distribution Sheet
+      </button>
     </div>
   `;
+
+  // Add one empty medical row and one empty HI row by default
+  _sdsAddMedRow();
+  _sdsAddHiRow();
+  _recalcSDS();
 }
 
-async function _onSettlementCaseChange() {
-  const sel = document.getElementById("stl-case-select");
-  const caseId = sel?.value;
-  if (!caseId) {
-    document.getElementById("stl-provider-table").innerHTML = `<p style="color:var(--text-muted)">Select a case to load providers.</p>`;
-    document.getElementById("stl-summary-card").innerHTML = "";
-    return;
-  }
+// â”€â”€â”€ Toggle lawsuit fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  // Pre-fill settlement amount from case data
-  const opt = sel.options[sel.selectedIndex];
-  const existingAmount = opt?.dataset?.settlement;
-  if (existingAmount) {
-    document.getElementById("stl-amount").value = existingAmount;
-  }
-
-  await _fetchSettlementProviders(caseId);
-  _recalcSettlement();
+function _sdsToggleLawsuit() {
+  const checked = document.getElementById("sds-is-lawsuit")?.checked;
+  const fields = document.getElementById("sds-lawsuit-fields");
+  if (fields) fields.style.display = checked ? "block" : "none";
 }
 
-async function _fetchSettlementProviders(caseId) {
+// â”€â”€â”€ Dynamic table rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+let _sdsMedRowIdx = 0;
+
+function _sdsAddMedRow(provider = "", originalAmt = "", finalAmt = "") {
+  const tbody = document.getElementById("sds-med-tbody");
+  if (!tbody) return;
+  const idx = _sdsMedRowIdx++;
+  const tr = document.createElement("tr");
+  tr.dataset.idx = idx;
+  tr.innerHTML = `
+    <td style="padding:4px 6px">
+      <input type="text" class="sds-med-provider" value="${escapeHtml(provider)}" placeholder="Provider name"
+        oninput="_recalcSDS()"
+        style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:4px 6px">
+    </td>
+    <td style="padding:4px 6px">
+      <input type="number" class="sds-med-orig" step="0.01" min="0" value="${originalAmt}" placeholder="0.00"
+        oninput="_recalcSDS()"
+        style="width:100%;text-align:right;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:4px 6px">
+    </td>
+    <td style="padding:4px 6px">
+      <input type="number" class="sds-med-final" step="0.01" min="0" value="${finalAmt}" placeholder="0.00"
+        oninput="_recalcSDS()"
+        style="width:100%;text-align:right;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:4px 6px">
+    </td>
+    <td style="padding:4px 6px;text-align:center">
+      <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:12px"
+        onclick="this.closest('tr').remove();_recalcSDS()">Remove</button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+  _recalcSDS();
+}
+
+let _sdsHiRowIdx = 0;
+
+function _sdsAddHiRow(insurer = "", amount = "") {
+  const tbody = document.getElementById("sds-hi-tbody");
+  if (!tbody) return;
+  const idx = _sdsHiRowIdx++;
+  const tr = document.createElement("tr");
+  tr.dataset.idx = idx;
+  tr.innerHTML = `
+    <td style="padding:4px 6px">
+      <input type="text" class="sds-hi-name" value="${escapeHtml(insurer)}" placeholder="Insurer name (e.g. BCBS)"
+        oninput="_recalcSDS()"
+        style="width:100%;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:4px 6px">
+    </td>
+    <td style="padding:4px 6px">
+      <input type="number" class="sds-hi-amount" step="0.01" min="0" value="${amount}" placeholder="0.00"
+        oninput="_recalcSDS()"
+        style="width:100%;text-align:right;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:4px 6px">
+    </td>
+    <td style="padding:4px 6px;text-align:center">
+      <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:12px"
+        onclick="this.closest('tr').remove();_recalcSDS()">Remove</button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+  _recalcSDS();
+}
+
+// â”€â”€â”€ Prefill from Case â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+async function prefillSettlementFromCase(caseId) {
+  if (!caseId) return;
+  const cases = typeof loadCases === "function" ? loadCases() : [];
+  const c = cases.find(x => x.id === caseId);
+  if (!c) return;
+
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; };
+
+  setVal("sds-client-name", c.clientName || "");
+  setVal("sds-date-of-loss", c.dateOfLoss || "");
+  setVal("sds-client-email", c.email || "");
+  setVal("sds-case-number", c.claimNumber || "");
+
+  if (c.settlementAmount) {
+    setVal("sds-settlement-amount", c.settlementAmount);
+  }
+
+  // Litigation check
+  const litigationStages = ["litigation_filed", "litigation_discovery", "litigation_motions", "trial_prep", "trial"];
+  const isLit = litigationStages.includes(c.stage);
+  const lawsuitCb = document.getElementById("sds-is-lawsuit");
+  if (lawsuitCb) {
+    lawsuitCb.checked = isLit;
+    _sdsToggleLawsuit();
+  }
+  if (isLit) {
+    setVal("sds-county", c.county || "Maricopa");
+  }
+
+  // Attorney: try to match from dropdown
+  if (c.attorney) {
+    const sel = document.getElementById("sds-attorney");
+    if (sel) {
+      const opts = Array.from(sel.options);
+      const match = opts.find(o => o.value && c.attorney.toLowerCase().includes(o.value.toLowerCase().split(",")[0].toLowerCase()));
+      if (match) sel.value = match.value;
+    }
+  }
+
+  _recalcSDS();
+
+  // Scroll to top of panel
+  document.getElementById("settlement-content")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// â”€â”€â”€ Load Specials into Med Bills â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+async function _loadSpecialsIntoMedBills(caseId) {
+  if (!caseId) { if (typeof showToast === "function") showToast("Select a case first", "error"); return; }
   const token = typeof getIdToken === "function" ? await getIdToken() : null;
-  const tableEl = document.getElementById("stl-provider-table");
-  tableEl.innerHTML = `<p style="color:var(--text-muted)">Loading providers...</p>`;
-
   try {
-    const resp = await fetch(`${SETTLEMENT_API}/api/specials?caseId=${caseId}`, {
+    const resp = await fetch(`/api/specials?caseId=${encodeURIComponent(caseId)}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const items = await resp.json();
-    _renderSettlementProviderTable(items);
-    _recalcSettlement();
+
+    // Clear existing rows
+    const tbody = document.getElementById("sds-med-tbody");
+    if (tbody) tbody.innerHTML = "";
+    _sdsMedRowIdx = 0;
+
+    if (!items.length) {
+      if (typeof showToast === "function") showToast("No specials found for this case", "error");
+      _sdsAddMedRow();
+      return;
+    }
+
+    for (const item of items) {
+      const provider = item.provider || "";
+      const origAmt = (Number(item.billed_amount) || 0).toFixed(2);
+      const lien = Number(item.lien_amount) || 0;
+      const reductionReceived = Number(item.reduction_received) || 0;
+      const finalAmt = Math.max(0, lien - reductionReceived).toFixed(2);
+      _sdsAddMedRow(provider, origAmt, finalAmt);
+    }
+
+    if (typeof showToast === "function") showToast(`Loaded ${items.length} provider(s) from specials`);
+    _recalcSDS();
   } catch (err) {
-    tableEl.innerHTML = `<div class="agent-error">${escapeHtml(err.message)}</div>`;
+    if (typeof showToast === "function") showToast(`Failed to load specials: ${err.message}`, "error");
   }
 }
 
-function _renderSettlementProviderTable(items) {
-  const el = document.getElementById("stl-provider-table");
-  if (!items.length) {
-    el.innerHTML = `<p style="color:var(--text-muted)">No providers / specials found for this case.</p>`;
-    return;
-  }
+// â”€â”€â”€ Live Recalc â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  let totalBilled = 0, totalLien = 0, totalReqd = 0, totalRecvd = 0, totalFinal = 0;
+function _recalcSDS() {
+  const settlement = _sdsVal("sds-settlement-amount");
 
-  const rows = items.map((item, idx) => {
-    const billed = Number(item.billed_amount) || 0;
-    const lien = Number(item.lien_amount) || 0;
-    const reductionReq = Number(item.reduction_requested) || 0;
-    const reductionRecv = Number(item.reduction_received) || 0;
-    const finalAmt = lien - reductionRecv;
+  // Attorney fees
+  const feeRadio = document.querySelector('input[name="sds-fee-pct"]:checked');
+  const feePct = feeRadio ? parseFloat(feeRadio.value) : 0.333;
+  const feeOverride = _sdsVal("sds-fee-override");
+  const attorneyFees = feeOverride > 0 ? feeOverride : settlement * feePct;
+  const feeLabel = feeOverride > 0 ? "Override" : (feePct >= 0.4 ? "40%" : "33.3%");
 
-    totalBilled += billed;
-    totalLien += lien;
-    totalReqd += reductionReq;
-    totalRecvd += reductionRecv;
-    totalFinal += finalAmt;
+  // Update calculated fee display
+  const feeCalcEl = document.getElementById("sds-fee-calc-label");
+  if (feeCalcEl) feeCalcEl.textContent = `$${_fmtS(attorneyFees)}`;
 
-    return `
-      <tr data-special-id="${item.id}" data-provider="${escapeHtml(item.provider || "")}">
-        <td>${escapeHtml(item.provider || "")}</td>
-        <td style="text-align:right">$${_fmtS(billed)}</td>
-        <td style="text-align:right">$${_fmtS(lien)}</td>
-        <td style="text-align:right">
-          <input type="number" class="stl-reduction-req" data-idx="${idx}" step="0.01" value="${reductionReq}" oninput="_recalcSettlement()" style="width:100px;text-align:right;padding:3px 6px;border-radius:4px;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border)">
-        </td>
-        <td style="text-align:right">
-          <input type="number" class="stl-reduction-recv" data-idx="${idx}" step="0.01" value="${reductionRecv}" oninput="_onReductionChange(this)" style="width:100px;text-align:right;padding:3px 6px;border-radius:4px;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border)">
-        </td>
-        <td style="text-align:right;font-weight:600" class="stl-final-amt">$${_fmtS(finalAmt)}</td>
-      </tr>`;
-  }).join("");
+  const legalCosts = _sdsVal("sds-legal-costs");
+  const medPay = _sdsVal("sds-medpay");
 
-  el.innerHTML = `
-    <div style="overflow-x:auto">
-      <table class="data-table" id="stl-table">
-        <thead><tr>
-          <th>Provider</th><th>Billed Amount</th><th>Lien Amount</th><th>Reduction Requested</th><th>Reduction Received</th><th>Final Amount</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-        <tfoot><tr style="font-weight:700;border-top:2px solid var(--border)">
-          <td>Totals</td>
-          <td style="text-align:right" id="stl-tot-billed">$${_fmtS(totalBilled)}</td>
-          <td style="text-align:right" id="stl-tot-lien">$${_fmtS(totalLien)}</td>
-          <td style="text-align:right" id="stl-tot-reqd">$${_fmtS(totalReqd)}</td>
-          <td style="text-align:right" id="stl-tot-recvd">$${_fmtS(totalRecvd)}</td>
-          <td style="text-align:right" id="stl-tot-final">$${_fmtS(totalFinal)}</td>
-        </tr></tfoot>
-      </table>
-    </div>`;
-}
+  // Sum medical bills
+  let totalMedOrig = 0, totalMedFinal = 0;
+  document.querySelectorAll("#sds-med-tbody tr").forEach(row => {
+    totalMedOrig += parseFloat(row.querySelector(".sds-med-orig")?.value) || 0;
+    totalMedFinal += parseFloat(row.querySelector(".sds-med-final")?.value) || 0;
+  });
+  const medOrigEl = document.getElementById("sds-med-orig-total");
+  const medFinalEl = document.getElementById("sds-med-final-total");
+  if (medOrigEl) medOrigEl.textContent = `$${_fmtS(totalMedOrig)}`;
+  if (medFinalEl) medFinalEl.textContent = `$${_fmtS(totalMedFinal)}`;
 
-function _onReductionChange(input) {
-  // Recalculate the final amount for this row
-  const row = input.closest("tr");
-  const lienText = row.cells[2].textContent.replace(/[$,]/g, "");
-  const lien = parseFloat(lienText) || 0;
-  const recv = parseFloat(input.value) || 0;
-  const finalCell = row.querySelector(".stl-final-amt");
-  if (finalCell) finalCell.textContent = `$${_fmtS(lien - recv)}`;
-  _recalcSettlement();
-}
+  // Sum health insurance
+  let totalHI = 0;
+  document.querySelectorAll("#sds-hi-tbody tr").forEach(row => {
+    totalHI += parseFloat(row.querySelector(".sds-hi-amount")?.value) || 0;
+  });
+  const hiTotalEl = document.getElementById("sds-hi-total");
+  if (hiTotalEl) hiTotalEl.textContent = `$${_fmtS(totalHI)}`;
 
-function _recalcSettlement() {
-  const grossSettlement = parseFloat(document.getElementById("stl-amount")?.value) || 0;
-  const feeRadio = document.querySelector('input[name="stl-fee-type"]:checked');
-  const feeRate = feeRadio ? parseFloat(feeRadio.value) : 0.333;
-  const legalCosts = parseFloat(document.getElementById("stl-costs")?.value) || 0;
+  const totalDeductions = attorneyFees + legalCosts + totalMedFinal + totalHI;
+  const settlementProceeds = settlement - totalDeductions;
+  const netToClient = settlementProceeds + medPay;
 
-  const attorneyFees = grossSettlement * feeRate;
-
-  // Sum final amounts from table
-  let totalMedical = 0;
-  const table = document.getElementById("stl-table");
-  if (table) {
-    const rows = table.querySelectorAll("tbody tr");
-    let totalBilled = 0, totalLien = 0, totalReqd = 0, totalRecvd = 0;
-    totalMedical = 0;
-
-    rows.forEach(row => {
-      const billedText = row.cells[1].textContent.replace(/[$,]/g, "");
-      const lienText = row.cells[2].textContent.replace(/[$,]/g, "");
-      const billed = parseFloat(billedText) || 0;
-      const lien = parseFloat(lienText) || 0;
-      const reqd = parseFloat(row.querySelector(".stl-reduction-req")?.value) || 0;
-      const recv = parseFloat(row.querySelector(".stl-reduction-recv")?.value) || 0;
-      const finalAmt = lien - recv;
-
-      totalBilled += billed;
-      totalLien += lien;
-      totalReqd += reqd;
-      totalRecvd += recv;
-      totalMedical += finalAmt;
-
-      const finalCell = row.querySelector(".stl-final-amt");
-      if (finalCell) finalCell.textContent = `$${_fmtS(finalAmt)}`;
-    });
-
-    // Update footer totals
-    const setTot = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = `$${_fmtS(val)}`; };
-    setTot("stl-tot-billed", totalBilled);
-    setTot("stl-tot-lien", totalLien);
-    setTot("stl-tot-reqd", totalReqd);
-    setTot("stl-tot-recvd", totalRecvd);
-    setTot("stl-tot-final", totalMedical);
-  }
-
-  const netToClient = grossSettlement - attorneyFees - legalCosts - totalMedical;
-
-  const feeLabel = feeRate >= 0.4 ? "40%" : "33.3%";
-
-  const summaryEl = document.getElementById("stl-summary-card");
+  // Render summary card
+  const summaryEl = document.getElementById("sds-summary-card");
   if (!summaryEl) return;
 
   summaryEl.innerHTML = `
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-top:20px">
-      <div style="font-weight:700;font-size:18px;margin-bottom:16px;color:var(--text-primary)">Settlement Distribution Summary</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">
-        <div style="text-align:center;padding:16px;background:var(--bg-surface,#1a1a2e);border-radius:8px">
-          <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Gross Settlement</div>
-          <div style="font-size:28px;font-weight:700;color:var(--text-primary);margin-top:4px">$${_fmtS(grossSettlement)}</div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px">
+      <div style="font-weight:700;font-size:17px;margin-bottom:16px;color:var(--text-primary)">Settlement Distribution Summary</div>
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:480px">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text-muted)">Settlement Amount</span>
+          <span style="font-weight:600;color:var(--text-primary)">$${_fmtS(settlement)}</span>
         </div>
-        <div style="text-align:center;padding:16px;background:var(--bg-surface,#1a1a2e);border-radius:8px">
-          <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Attorney Fees (${escapeHtml(feeLabel)})</div>
-          <div style="font-size:28px;font-weight:700;color:#ef4444;margin-top:4px">-$${_fmtS(attorneyFees)}</div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0">
+          <span style="color:var(--text-muted)">âˆ’ Attorney Fees (${escapeHtml(feeLabel)})</span>
+          <span style="color:#ef4444">-$${_fmtS(attorneyFees)}</span>
         </div>
-        <div style="text-align:center;padding:16px;background:var(--bg-surface,#1a1a2e);border-radius:8px">
-          <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Legal Costs</div>
-          <div style="font-size:28px;font-weight:700;color:#ef4444;margin-top:4px">-$${_fmtS(legalCosts)}</div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0">
+          <span style="color:var(--text-muted)">âˆ’ Legal Costs</span>
+          <span style="color:#ef4444">-$${_fmtS(legalCosts)}</span>
         </div>
-        <div style="text-align:center;padding:16px;background:var(--bg-surface,#1a1a2e);border-radius:8px">
-          <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Total Medical Liens/Bills</div>
-          <div style="font-size:28px;font-weight:700;color:#ef4444;margin-top:4px">-$${_fmtS(totalMedical)}</div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0">
+          <span style="color:var(--text-muted)">âˆ’ Total Medical Bills</span>
+          <span style="color:#ef4444">-$${_fmtS(totalMedFinal)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text-muted)">âˆ’ Health Insurance Reimbursement</span>
+          <span style="color:#ef4444">-$${_fmtS(totalHI)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0">
+          <span style="color:var(--text-muted);font-weight:600">= Settlement Proceeds to Client</span>
+          <span style="font-weight:700;color:var(--text-primary)">$${_fmtS(settlementProceeds)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:2px solid var(--border)">
+          <span style="color:var(--text-muted)">+ Med-Pay Proceeds</span>
+          <span style="color:var(--success,#22c55e)">+$${_fmtS(medPay)}</span>
         </div>
       </div>
-      <div style="margin-top:20px;padding:20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;text-align:center">
-        <div style="font-size:12px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:1px">Net to Client</div>
-        <div style="font-size:36px;font-weight:700;color:#fff;margin-top:4px">$${_fmtS(netToClient)}</div>
+      <div style="margin-top:16px;padding:20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:13px;color:rgba(255,255,255,0.85);text-transform:uppercase;letter-spacing:1px;font-weight:600">NET PROCEEDS TO CLIENT</div>
+        <div style="font-size:32px;font-weight:700;color:#fff">$${_fmtS(netToClient)}</div>
       </div>
     </div>`;
 }
 
-// ─── Save Distribution rows to API ─────────────────────────────────
+// â”€â”€â”€ Generate SDS Document â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-async function _saveDistribution() {
-  const caseId = document.getElementById("stl-case-select")?.value;
-  if (!caseId) { showToast("Select a case first", "error"); return; }
+async function _generateSDS() {
+  // Collect + validate
+  const clientName = (document.getElementById("sds-client-name")?.value || "").trim();
+  const settlement = _sdsVal("sds-settlement-amount");
+  const clientEmail = (document.getElementById("sds-client-email")?.value || "").trim();
+  const dateOfLoss = (document.getElementById("sds-date-of-loss")?.value || "").trim();
+  const attorney = (document.getElementById("sds-attorney")?.value || "").trim();
+  const breakdownDesc = (document.getElementById("sds-settlement-breakdown")?.value || "").trim();
+  const legalCosts = _sdsVal("sds-legal-costs");
+  const medPay = _sdsVal("sds-medpay");
+  const isLawsuit = document.getElementById("sds-is-lawsuit")?.checked || false;
+  const county = (document.getElementById("sds-county")?.value || "").trim();
+  const caseNumber = (document.getElementById("sds-case-number")?.value || "").trim();
+  const caseId = (document.getElementById("sds-case-select")?.value || "").trim();
 
-  const table = document.getElementById("stl-table");
-  if (!table) { showToast("No provider data to save", "error"); return; }
+  const errors = [];
+  if (!clientName) errors.push("Client Name");
+  if (!settlement) errors.push("Settlement Amount");
+  if (!clientEmail) errors.push("Client Email");
+  if (!dateOfLoss) errors.push("Date of Loss");
+  if (errors.length) {
+    if (typeof showToast === "function") showToast(`Required: ${errors.join(", ")}`, "error");
+    return;
+  }
 
-  const token = typeof getIdToken === "function" ? await getIdToken() : null;
-  const headers = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  // Attorney fees
+  const feeRadio = document.querySelector('input[name="sds-fee-pct"]:checked');
+  const feePct = feeRadio ? parseFloat(feeRadio.value) : 0.333;
+  const feeOverride = _sdsVal("sds-fee-override");
+  const feeOriginal = _sdsVal("sds-fee-original");
+  const attorneyFees = feeOverride > 0 ? feeOverride : settlement * feePct;
+  const feePctLabel = feePct >= 0.4 ? "40%" : "33.3%";
 
-  const grossSettlement = parseFloat(document.getElementById("stl-amount")?.value) || 0;
-  const feeRadio = document.querySelector('input[name="stl-fee-type"]:checked');
-  const feeRate = feeRadio ? parseFloat(feeRadio.value) : 0.333;
-  const legalCosts = parseFloat(document.getElementById("stl-costs")?.value) || 0;
-
-  const rows = table.querySelectorAll("tbody tr");
-  let saved = 0, errors = 0;
-
-  for (const row of rows) {
-    const specialId = row.dataset.specialId;
-    const provider = row.dataset.provider;
-    const lienText = row.cells[2].textContent.replace(/[$,]/g, "");
-    const lienAmount = parseFloat(lienText) || 0;
-    const reductionReq = parseFloat(row.querySelector(".stl-reduction-req")?.value) || 0;
-    const reductionRecv = parseFloat(row.querySelector(".stl-reduction-recv")?.value) || 0;
-    const finalAmount = lienAmount - reductionRecv;
-
-    const payload = {
-      case_id: caseId,
-      special_id: specialId,
-      provider: provider,
-      gross_settlement: grossSettlement,
-      fee_rate: feeRate,
-      legal_costs: legalCosts,
-      lien_amount: lienAmount,
-      reduction_requested: reductionReq,
-      reduction_received: reductionRecv,
-      final_amount: finalAmount,
-    };
-
-    try {
-      const resp = await fetch(`${SETTLEMENT_API}/api/settlement-distributions`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      saved++;
-    } catch {
-      errors++;
+  // Medical bills
+  const medBills = [];
+  document.querySelectorAll("#sds-med-tbody tr").forEach(row => {
+    const provider = row.querySelector(".sds-med-provider")?.value?.trim() || "";
+    const origAmt = parseFloat(row.querySelector(".sds-med-orig")?.value) || 0;
+    const finalAmt = parseFloat(row.querySelector(".sds-med-final")?.value) || 0;
+    if (provider || finalAmt) {
+      medBills.push({ provider, originalAmount: origAmt, finalAmount: finalAmt });
     }
-  }
-
-  if (errors) {
-    showToast(`Saved ${saved} rows, ${errors} failed`, "error");
-  } else {
-    showToast(`Distribution saved (${saved} rows)`);
-  }
-}
-
-// ─── Export CSV ─────────────────────────────────────────────────────
-
-function _exportSettlementCSV() {
-  const table = document.getElementById("stl-table");
-  if (!table) { showToast("No data to export", "error"); return; }
-
-  const grossSettlement = parseFloat(document.getElementById("stl-amount")?.value) || 0;
-  const feeRadio = document.querySelector('input[name="stl-fee-type"]:checked');
-  const feeRate = feeRadio ? parseFloat(feeRadio.value) : 0.333;
-  const legalCosts = parseFloat(document.getElementById("stl-costs")?.value) || 0;
-  const attorneyFees = grossSettlement * feeRate;
-
-  const csvRows = [];
-  csvRows.push("Provider,Billed Amount,Lien Amount,Reduction Requested,Reduction Received,Final Amount");
-
-  let totalFinal = 0;
-  const rows = table.querySelectorAll("tbody tr");
-  rows.forEach(row => {
-    const provider = (row.dataset.provider || "").replace(/"/g, '""');
-    const billed = row.cells[1].textContent.replace(/[$,]/g, "").trim();
-    const lien = row.cells[2].textContent.replace(/[$,]/g, "").trim();
-    const reqd = row.querySelector(".stl-reduction-req")?.value || "0";
-    const recv = row.querySelector(".stl-reduction-recv")?.value || "0";
-    const finalText = row.querySelector(".stl-final-amt")?.textContent.replace(/[$,]/g, "").trim() || "0";
-    totalFinal += parseFloat(finalText) || 0;
-    csvRows.push(`"${provider}",${billed},${lien},${reqd},${recv},${finalText}`);
   });
 
-  csvRows.push("");
-  csvRows.push(`"Totals",,,,,"${totalFinal.toFixed(2)}"`);
-  csvRows.push("");
-  csvRows.push("Settlement Summary");
-  csvRows.push(`"Gross Settlement","${grossSettlement.toFixed(2)}"`);
-  csvRows.push(`"Attorney Fees (${feeRate >= 0.4 ? '40%' : '33.3%'})","${attorneyFees.toFixed(2)}"`);
-  csvRows.push(`"Legal Costs","${legalCosts.toFixed(2)}"`);
-  csvRows.push(`"Total Medical Liens/Bills","${totalFinal.toFixed(2)}"`);
-  csvRows.push(`"Net to Client","${(grossSettlement - attorneyFees - legalCosts - totalFinal).toFixed(2)}"`);
+  // Health insurance
+  const healthInsurance = [];
+  document.querySelectorAll("#sds-hi-tbody tr").forEach(row => {
+    const insurer = row.querySelector(".sds-hi-name")?.value?.trim() || "";
+    const amount = parseFloat(row.querySelector(".sds-hi-amount")?.value) || 0;
+    if (insurer || amount) {
+      healthInsurance.push({ insurer, amount });
+    }
+  });
 
-  const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `settlement-distribution-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast("CSV exported");
+  const totalMedFinal = medBills.reduce((s, b) => s + b.finalAmount, 0);
+  const totalHI = healthInsurance.reduce((s, h) => s + h.amount, 0);
+  const totalDeductions = attorneyFees + legalCosts + totalMedFinal + totalHI;
+  const settlementProceeds = settlement - totalDeductions;
+  const netToClient = settlementProceeds + medPay;
+
+  const payload = {
+    clientName, dateOfLoss, attorney,
+    settlementAmount: settlement,
+    settlementBreakdown: breakdownDesc,
+    feePct: feePct * 100,
+    feePctLabel,
+    attorneyFees,
+    feeOriginal: feeOriginal > 0 ? feeOriginal : null,
+    legalCosts,
+    medBills,
+    healthInsurance,
+    totalDeductions,
+    settlementProceeds,
+    medPay,
+    netToClient,
+    isLawsuit,
+    county,
+    caseNumber,
+    clientEmail,
+    caseId: caseId || null,
+  };
+
+  const resultArea = document.getElementById("sds-result-area");
+  if (resultArea) resultArea.innerHTML = `<div style="padding:12px;color:var(--text-muted)">Generating document...</div>`;
+
+  try {
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+    const resp = await fetch("/api/settlement-distribution/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const filename = data.filename;
+
+    if (resultArea) {
+      resultArea.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:8px">
+          <div style="font-weight:700;margin-bottom:12px;color:var(--text-primary)">Document Generated</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <a href="/api/download/${encodeURIComponent(filename)}" target="_blank" class="btn btn-outline">
+              Download DOCX
+            </a>
+            <button type="button" class="btn btn-primary" style="background:#6366f1"
+              onclick="_sendSDSDocuSign('${escapeHtml(filename)}','${escapeHtml(clientEmail)}','${escapeHtml(clientName)}','${escapeHtml(caseId)}')">
+              Send via DocuSign
+            </button>
+          </div>
+        </div>`;
+    }
+
+    if (typeof showToast === "function") showToast("Distribution sheet generated successfully");
+  } catch (err) {
+    if (resultArea) resultArea.innerHTML = `<div class="agent-error" style="margin-top:8px">${escapeHtml(err.message)}</div>`;
+    if (typeof showToast === "function") showToast(`Generation failed: ${err.message}`, "error");
+  }
 }
 
-// ─── Save to Case (update localStorage case record) ────────────────
+// â”€â”€â”€ Send via DocuSign â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function _saveSettlementToCase() {
-  const caseId = document.getElementById("stl-case-select")?.value;
-  if (!caseId) { showToast("Select a case first", "error"); return; }
-
-  const grossSettlement = parseFloat(document.getElementById("stl-amount")?.value) || 0;
-  const feeRadio = document.querySelector('input[name="stl-fee-type"]:checked');
-  const feeRate = feeRadio ? parseFloat(feeRadio.value) : 0.333;
-  const legalCosts = parseFloat(document.getElementById("stl-costs")?.value) || 0;
-  const attorneyFees = grossSettlement * feeRate;
-
-  // Sum final amounts
-  let totalMedical = 0;
-  const table = document.getElementById("stl-table");
-  if (table) {
-    table.querySelectorAll("tbody tr").forEach(row => {
-      const lienText = row.cells[2].textContent.replace(/[$,]/g, "");
-      const recv = parseFloat(row.querySelector(".stl-reduction-recv")?.value) || 0;
-      totalMedical += (parseFloat(lienText) || 0) - recv;
-    });
+async function _sendSDSDocuSign(filename, clientEmail, clientName, caseId) {
+  if (!clientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+    if (typeof showToast === "function") showToast("Invalid client email address", "error");
+    return;
   }
 
-  const netToClient = grossSettlement - attorneyFees - legalCosts - totalMedical;
+  const resultArea = document.getElementById("sds-result-area");
+  const btn = resultArea?.querySelector("button[onclick*='_sendSDSDocuSign']");
+  if (btn) { btn.disabled = true; btn.textContent = "Sending..."; }
 
-  if (typeof updateCase === "function") {
-    updateCase(caseId, {
-      settlementAmount: grossSettlement,
-      legalFees: attorneyFees,
-      legalCosts: legalCosts,
-      netToClient: netToClient,
+  try {
+    const token = typeof getIdToken === "function" ? await getIdToken() : null;
+    const resp = await fetch("/api/esign/send-file", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        filename,
+        signerEmail: clientEmail,
+        signerName: clientName,
+        emailSubject: "Settlement Distribution Sheet for Signature â€” Sher Law Group",
+        caseId: caseId || null,
+      }),
     });
-    showToast("Case updated with settlement data");
-  } else {
-    showToast("updateCase not available", "error");
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+
+    // Upload to OneDrive if available
+    if (typeof _uploadDemandToOneDrive === "function") {
+      try {
+        const fileResp = await fetch(`/api/download/${encodeURIComponent(filename)}`);
+        if (fileResp.ok) {
+          const blob = await fileResp.blob();
+          const file = new File([blob], filename, { type: blob.type });
+          await _uploadDemandToOneDrive(file, clientName).catch(err =>
+            console.warn("[sds] OneDrive upload skipped:", err.message)
+          );
+        }
+      } catch (odErr) {
+        console.warn("[sds] OneDrive upload skipped:", odErr.message);
+      }
+    }
+
+    // Move case to negotiations stage
+    if (caseId && typeof moveCaseToStage === "function") {
+      moveCaseToStage(caseId, "negotiations");
+      if (typeof renderKanbanBoard === "function") renderKanbanBoard();
+    }
+
+    if (resultArea) {
+      resultArea.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid #22c55e;border-radius:10px;padding:20px;margin-top:8px">
+          <div style="color:#22c55e;font-weight:700;margin-bottom:6px">Sent via DocuSign</div>
+          <div style="color:var(--text-muted);font-size:13px">Envelope ID: ${escapeHtml(data.envelopeId || "")}</div>
+          <div style="color:var(--text-muted);font-size:13px;margin-top:4px">Sent to: ${escapeHtml(clientEmail)}</div>
+          ${caseId ? `<div style="color:var(--text-muted);font-size:13px;margin-top:4px">Case moved to Negotiations.</div>` : ""}
+        </div>`;
+    }
+
+    if (typeof showToast === "function") showToast("Settlement sheet sent for signature via DocuSign");
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = "Send via DocuSign"; }
+    if (typeof showToast === "function") showToast(`DocuSign send failed: ${err.message}`, "error");
   }
 }

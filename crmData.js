@@ -471,6 +471,9 @@ function openCaseDetail(caseId) {
         ${c.stage === "client_treating" ? `<button type="button" class="btn btn-accent" style="background:#14b8a6" onclick="moveCaseToStage('${c.id}','lien_search');renderKanbanBoard();closeCaseModal();showToast('Moved to Lien Search')">✅ Done Treating</button>` : ""}
         ${c.stage === "lien_search" ? `<button type="button" class="btn btn-accent" style="background:#3b82f6" onclick="moveCaseToStage('${c.id}','collecting_records');renderKanbanBoard();closeCaseModal();showToast('Moved to Collecting Records')">📋 Collect Records</button>` : ""}
         ${c.stage === "collecting_records" ? `<button type="button" class="btn btn-accent" style="background:#f59e0b;color:#000" onclick="moveCaseToStage('${c.id}','demand_prep');renderKanbanBoard();closeCaseModal();showToast('Moved to Demand Prep')">📄 Ready to Demand</button>` : ""}
+        ${c.stage === "settlement_dist" ? `
+          <button type="button" class="btn btn-accent" style="background:#f97316" onclick="closeCaseModal();switchPanel('settlement');setTimeout(()=>prefillSettlementFromCase('${c.id}'),200)">📋 Settlement Sheet</button>
+        ` : ""}
         ${c.stage === "negotiations" ? `
           <button type="button" class="btn btn-accent" style="background:#22c55e" onclick="moveCaseToStage('${c.id}','send_acceptance');renderKanbanBoard();closeCaseModal();showToast('Case Settled — moved to Send Acceptance')">✅ Case Settled</button>
           <button type="button" class="btn btn-accent" style="background:#ef4444" onclick="moveCaseToStage('${c.id}','litigation_filed');_activeBoardTab='litigation';renderKanbanBoard();closeCaseModal();showToast('Moved to Litigation')">⚖️ Move to Litigation</button>
