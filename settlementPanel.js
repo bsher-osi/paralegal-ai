@@ -59,7 +59,7 @@ function renderSettlementPanel() {
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
       <div class="form-group" style="flex:1;min-width:220px">
         <label>Fee Percentage</label>
-        <div style="display:flex;gap:16px;padding-top:6px;flex-wrap:wrap">
+        <div style="display:flex;gap:16px;padding-top:6px;flex-wrap:wrap;align-items:center">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-primary)">
             <input type="radio" name="sds-fee-pct" value="0.333" checked onchange="_recalcSDS()">
             Pre-Litigation (33.3%)
@@ -68,6 +68,12 @@ function renderSettlementPanel() {
             <input type="radio" name="sds-fee-pct" value="0.40" onchange="_recalcSDS()">
             Litigation (40%)
           </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-primary)">
+            <input type="radio" name="sds-fee-pct" value="other" onchange="_recalcSDS()">
+            Other:
+          </label>
+          <input type="number" id="sds-fee-pct-other" step="0.1" min="0" max="100" placeholder="%" style="width:70px;padding:4px 8px;border-radius:4px;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);font-size:13px" oninput="document.querySelector('input[name=sds-fee-pct][value=other]').checked=true;_recalcSDS()">
+          <span style="font-size:12px;color:var(--text-muted)">%</span>
         </div>
         <div style="margin-top:6px;font-size:13px;color:var(--text-muted)">
           Calculated fee: <span id="sds-fee-calc-label" style="color:var(--text-primary);font-weight:600">$0.00</span>
@@ -302,10 +308,14 @@ async function prefillSettlementFromCase(caseId) {
   const c = cases.find(x => x.id === caseId);
   if (!c) return;
 
-  const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; };
+  // Sync the case dropdown to the selected case
+  const caseSelect = document.getElementById("sds-case-select");
+  if (caseSelect) caseSelect.value = caseId;
+
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null && val !== "") el.value = val; };
 
   setVal("sds-client-name", c.clientName || "");
-  setVal("sds-date-of-loss", c.dateOfLoss || "");
+  setVal("sds-date-of-loss", c.dateOfLoss || c.dateOfIncident || "");
   setVal("sds-client-email", c.email || "");
   setVal("sds-case-number", c.claimNumber || "");
 
@@ -325,13 +335,19 @@ async function prefillSettlementFromCase(caseId) {
     setVal("sds-county", c.county || "Maricopa");
   }
 
-  // Attorney: try to match from dropdown
-  if (c.attorney) {
-    const sel = document.getElementById("sds-attorney");
-    if (sel) {
-      const opts = Array.from(sel.options);
+  // Attorney: try to match from case data, otherwise default to first real option
+  const attySelect = document.getElementById("sds-attorney");
+  if (attySelect) {
+    let matched = false;
+    if (c.attorney) {
+      const opts = Array.from(attySelect.options);
       const match = opts.find(o => o.value && c.attorney.toLowerCase().includes(o.value.toLowerCase().split(",")[0].toLowerCase()));
-      if (match) sel.value = match.value;
+      if (match) { attySelect.value = match.value; matched = true; }
+    }
+    if (!matched) {
+      // Default to first non-empty option (Yelena Shimonova Sher, Esq.)
+      const firstReal = Array.from(attySelect.options).find(o => o.value);
+      if (firstReal) attySelect.value = firstReal.value;
     }
   }
 
@@ -387,10 +403,14 @@ function _recalcSDS() {
 
   // Attorney fees
   const feeRadio = document.querySelector('input[name="sds-fee-pct"]:checked');
-  const feePct = feeRadio ? parseFloat(feeRadio.value) : 0.333;
+  let feePct = feeRadio ? parseFloat(feeRadio.value) : 0.333;
+  if (feeRadio?.value === "other") {
+    const otherPct = parseFloat(document.getElementById("sds-fee-pct-other")?.value) || 0;
+    feePct = otherPct / 100;
+  }
   const feeOverride = _sdsVal("sds-fee-override");
   const attorneyFees = feeOverride > 0 ? feeOverride : settlement * feePct;
-  const feeLabel = feeOverride > 0 ? "Override" : (feePct >= 0.4 ? "40%" : "33.3%");
+  const feeLabel = feeOverride > 0 ? "Override" : (feePct >= 0.4 ? "40%" : feePct === 0.333 ? "33.3%" : `${(feePct * 100).toFixed(1)}%`);
 
   // Update calculated fee display
   const feeCalcEl = document.getElementById("sds-fee-calc-label");
@@ -495,11 +515,14 @@ async function _generateSDS() {
 
   // Attorney fees
   const feeRadio = document.querySelector('input[name="sds-fee-pct"]:checked');
-  const feePct = feeRadio ? parseFloat(feeRadio.value) : 0.333;
+  let feePct = feeRadio ? parseFloat(feeRadio.value) : 0.333;
+  if (feeRadio?.value === "other") {
+    feePct = (parseFloat(document.getElementById("sds-fee-pct-other")?.value) || 0) / 100;
+  }
   const feeOverride = _sdsVal("sds-fee-override");
   const feeOriginal = _sdsVal("sds-fee-original");
   const attorneyFees = feeOverride > 0 ? feeOverride : settlement * feePct;
-  const feePctLabel = feePct >= 0.4 ? "40%" : "33.3%";
+  const feePctLabel = feePct >= 0.4 ? "40%" : feePct === 0.333 ? "33.3%" : `${(feePct * 100).toFixed(1)}%`;
 
   // Medical bills
   const medBills = [];
